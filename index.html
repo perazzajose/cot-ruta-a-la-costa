@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <title>Ruta a la Costa</title>
+  <style>
+    html, body { margin: 0; height: 100%; background: #10202a; overflow: hidden; touch-action: none; }
+    #game { width: 100%; height: 100%; }
+    #nameBox { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
+      background: rgba(0, 0, 0, 0.55); font-family: Arial, sans-serif; z-index: 10; }
+    #nameBox.hidden { display: none; }
+    #nameBox .card { background: #ffffff; border-radius: 14px; padding: 22px 20px; width: min(320px, calc(100% - 32px));
+      box-sizing: border-box; text-align: center; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4); }
+    #nameBox p { margin: 0 0 14px; font-size: 20px; font-weight: bold; color: #1b4f9c; }
+    #nameBox input { width: 100%; box-sizing: border-box; font-size: 22px; padding: 10px; border: 2px solid #1b4f9c;
+      border-radius: 8px; text-align: center; text-transform: uppercase; }
+    #nameBox button { margin-top: 12px; width: 100%; font-size: 20px; font-weight: bold; padding: 10px; border: 0;
+      border-radius: 8px; background: #f2b705; color: #10202a; cursor: pointer; }
+  </style>
+</head>
+<body>
+  <div id="game"></div>
+  <div id="nameBox" class="hidden">
+    <div class="card">
+      <p>¡Entraste al ranking!</p>
+      <input id="nameInput" maxlength="12" placeholder="Tu nombre" autocomplete="off">
+      <button id="nameOk">Guardar</button>
+    </div>
+  </div>
+
+  <script src="lib/phaser.min.js"></script>
+  <script src="src/config.js"></script>
+  <script src="src/sound.js"></script>
+  <script src="src/ranking.js"></script>
+  <script src="src/textures.js"></script>
+  <script src="src/scenes/BootScene.js"></script>
+  <script src="src/scenes/TitleScene.js"></script>
+  <script src="src/scenes/PlayScene.js"></script>
+  <script src="src/scenes/ResultScene.js"></script>
+  <script src="src/main.js"></script>
+</body>
+</html>

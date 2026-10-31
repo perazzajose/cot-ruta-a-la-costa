@@ -1,0 +1,16 @@
+# Herramientas de Claude Code (no son parte del juego)
+.claude/
+
+# Descarga original del ómnibus (ya procesado en assets/ y src3d/busModel.js)
+src/marcopolo_g7_1200_free.zip
+# Fotos de referencia sacadas de internet (licencia desconocida)
+src/*.jpg
+
+# Python
+__pycache__/
+*.pyc
+
+# Sistema
+Thumbs.db
+desktop.ini
+.DS_Store

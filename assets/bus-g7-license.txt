@@ -1,0 +1,11 @@
+Model Information:
+* title:	Marcopolo g7 1200 FREE
+* source:	https://sketchfab.com/3d-models/marcopolo-g7-1200-free-3ccb328bf76f435fa6180936b59a8c90
+* author:	SquielOFICIAL (https://sketchfab.com/SquielOFICIAL)
+
+Model License:
+* license type:	CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)
+* requirements:	Author must be credited. Commercial use is allowed.
+
+If you use this 3D model in your project be sure to copy paste this credit wherever you share it:
+This work is based on "Marcopolo g7 1200 FREE" (https://sketchfab.com/3d-models/marcopolo-g7-1200-free-3ccb328bf76f435fa6180936b59a8c90) by SquielOFICIAL (https://sketchfab.com/SquielOFICIAL) licensed under CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)
