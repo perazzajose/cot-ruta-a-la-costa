@@ -50,7 +50,33 @@ En el camino aparecen los peajes de **Pando** (km 33) y **Solís** (km 81), los 
 
 **Armar otros tramos:** todo lo que aparece en cada tramo está en `src3d/route3d.js` (`ROUTES3D`). Ahí van los km de inicio y fin, el origen y el destino, el perfil de la ruta (`ib` o `r9`) y las zonas de paisaje (con qué tanto aparece cada árbol, casa, vaca, butiá, pajonal o charco; un peso de más de 4 los hace todavía más densos). También van los lugares por km (localidades, arroyos, peajes, cerros, mar o laguna, fortaleza) y las paradas. Los km son aproximados y se ajustan ahí, sin tocar el código del juego. Para sumar un tramo nuevo alcanza con agregar otra entrada.
 
-**Garaje y skins:** en la pantalla de título, el botón **VER ÓMNIBUS** (o la tecla **G**) abre un garaje donde se ve el ómnibus girando. Se puede arrastrar para rotarlo y cambiar de skin con ◀ ▶. La skin elegida queda guardada en esa PC. Hoy hay una sola disponible (COT Primera Clase) y dos lugares marcados como "Próximamente". Para habilitar una nueva, se completa su entrada en `SKINS` (`src3d/world3d.js`) con `available: true`, sus colores y su logo.
+**Jugador y empresa:** al entrar, el jugador pone su nombre y elige empresa: **COT**, **Rutas del Sol** o **CYNSA**. La empresa define el ómnibus (COT tiene dos, Primera Clase y 925, que se alternan con el botón **ÓMNIBUS** del título o la tecla **O**). El nombre va directo al ranking, que muestra la empresa de cada uno. Después de cada viaje la pantalla vuelve a aparecer con lo anterior cargado, para el próximo jugador. Las empresas y sus skins están en `COMPANIES` (`src3d/game3d.js`).
+
+**Skins:**
+- **COT Primera Clase:** librea pintada por código según las fotos del Marcopolo de COT.
+- **COT 925:** sale de una plantilla de pintura de Proton Bus Simulator (`src/cot925.zip`). Como esa plantilla se hizo para otro modelo, se **proyecta** sobre el nuestro desde cada lado (costados, techo, cola y frente), calibrada para que sus ventanas coincidan con las del modelo. Lo negro de la plantilla se dibuja como vidrio. La imagen está embebida en `src3d/skinCot925.js` y la calibración de cada panel está en `SKINS` (`src3d/world3d.js`). La plantilla la hizo un modder: si el juego se publica, conviene pedirle permiso y darle crédito.
+
+**Skins de otras empresas** (en `src3d/skins/`):
+- **Rutas del Sol:** pintada con IA sobre nuestra plantilla (`assets/rutasdelsolprueba.png`); se pasaron los vidrios a negro puro.
+- **CYNSA:** sale de un dibujo de Maílson Amancio Pereira (`assets/cynsaprueba.jpg`, Marcopolo Viaggio G7 1050), recortado y estirado vista por vista a nuestra plantilla. El dibujo pide mantener el crédito, que está en el título. Como es de otro modelo y de baja resolución, las ruedas dibujadas no coinciden del todo y se ve algo borrosa de cerca.
+- Son marcas reales: antes de mostrarlas en el evento, confirmar que COT está de acuerdo.
+
+**Hacer una skin nueva (queda tan bien como la de COT):**
+1. Abrí `assets/plantilla-omnibus/plantilla-en-blanco.png` en un programa de dibujo (Photoshop, GIMP, Krita, Photopea…). Son vistas exactas de NUESTRO ómnibus, así que todo lo que pintes calza justo:
+   - arriba, el costado izquierdo (el frente queda a la izquierda);
+   - debajo, el costado derecho, con la puerta (el frente queda a la derecha);
+   - después, el techo;
+   - abajo a la izquierda, la cola;
+   - al lado, el frente.
+   `plantilla-ejemplo-cot.png` es la misma plantilla con la librea de COT, como referencia.
+2. Pintá encima, sin mover ni estirar nada. Lo que pintes **negro puro** se dibuja como vidrio. La luneta también se puede pintar (por ejemplo, con un logo).
+3. Guardala como JPG de 2048 × 2048 (cuadrada) y convertila: `py tools/skin_a_js.py mi-skin.jpg cot_verano "COT Verano"`. El script crea `src3d/skins/cot_verano.js` y lo agrega a `index3d.html`. La skin aparece en el botón ÓMNIBUS.
+
+Si el modelo del ómnibus cambia, la plantilla se regenera abriendo `tools/generar_plantilla.html?blanco` (y `?ejemplo`) y guardando la imagen.
+
+Para sumar otra plantilla de Proton (hecha para otro modelo, calza peor): embeberla igual que `skinCot925.js` y copiar la entrada `cot925` de `SKINS`, ajustando los píxeles de cada panel.
+
+El visor del ómnibus (garaje) se sacó: de cerca y de costado se notaban los defectos del modelo, que en el juego, con la cámara atrás, no se ven.
 
 **Manejo:** el ómnibus se maneja como uno real. Acelera despacio (de 0 a 90 km/h en unos 6 segundos), necesita unos 40 m para frenar del todo y cambia de carril en unos 2 segundos (un toque cambia de carril completo; mantener apretado lo mueve de a poco y al soltar se queda donde está, aunque sea entre dos carriles), con la carrocería inclinándose en las curvas y la trompa hundiéndose al frenar. El aviso de parada aparece con tiempo de sobra para frenar.
 

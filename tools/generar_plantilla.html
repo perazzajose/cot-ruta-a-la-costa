@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Plantilla del ómnibus</title>
+<style>
+  body { margin: 0; background: #222; color: #eee; font-family: Arial, sans-serif; }
+  p { margin: 10px 14px; }
+  canvas { display: block; width: min(100vw, 900px); height: auto; }
+</style>
+</head>
+<body>
+<p>Genera la plantilla para pintar skins de NUESTRO ómnibus (3000 × 3000). Clic derecho → "Guardar imagen como…".
+  <a href="?blanco" style="color:#f2b705">en blanco</a> · <a href="?ejemplo" style="color:#f2b705">ejemplo COT</a></p>
+<script src="../lib/three.bundle.min.js"></script>
+<script src="../src3d/bend3d.js"></script>
+<script src="../src3d/busModel.js"></script>
+<script src="../src3d/textures3d.js"></script>
+<script src="../src3d/route3d.js"></script>
+<script src="../src3d/world3d.js"></script>
+<script>
+// Las vistas y los rectángulos tienen que coincidir con PLANTILLA en src3d/world3d.js.
+const SIZE = 3000;
+const VIEWS = [
+  // rect en píxeles [x0, y0, x1, y1], cámara (posición, arriba) y frustum [izq, der, arriba, abajo].
+  { rect: [0, 0, 3000, 900], pos: [-30, 0, 0], up: [0, 1, 0], fr: [-6.5, 6.5, 4.3, 0] },        // costado izquierdo
+  { rect: [0, 900, 3000, 1800], pos: [30, 0, 0], up: [0, 1, 0], fr: [-6.5, 6.5, 4.3, 0] },      // costado derecho
+  { rect: [0, 1800, 3000, 2400], pos: [0, 30, 0], up: [1, 0, 0], fr: [-6.5, 6.5, 1.28, -1.28] }, // techo
+  { rect: [0, 2400, 700, 3000], pos: [0, 0, 30], up: [0, 1, 0], fr: [-1.14, 1.14, 4.0, 0.3] },  // cola
+  { rect: [800, 2400, 1500, 3000], pos: [0, 0, -30], up: [0, 1, 0], fr: [-1.28, 1.28, 4.0, 0.3] } // frente
+];
+const blank = /blanco/.test(location.search);
+const r = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+r.setPixelRatio(1);
+r.setSize(SIZE, SIZE);
+r.toneMapping = THREE.NoToneMapping;
+r.setClearColor(0x202020);
+document.body.appendChild(r.domElement);
+const scene = new THREE.Scene();
+scene.add(new THREE.AmbientLight(0xffffff, Math.PI));   // luz pareja: los colores salen tal cual, sin sombras
+if (blank) World3D.SKINS.push({ id: '_blanco', name: '', available: true,
+  colors: { white: '#f4f4f4', orange: '#f4f4f4', red: '#f4f4f4', yellow: '#f4f4f4', black: '#000000' } });
+World3D.loadBus((bus) => {
+  bus.userData.setSkin(blank ? '_blanco' : 'cot');
+  bus.traverse((o) => {
+    if (o.userData.isBlob) o.visible = false;
+    if (o.isMesh && o.material) { o.material.metalness = 0; o.material.roughness = 1; o.material.envMap = null; }
+  });
+  scene.add(bus);
+  setTimeout(() => {
+    r.setScissorTest(true);
+    r.clear();
+    VIEWS.forEach((v) => {
+      const [x0, y0, x1, y1] = v.rect;
+      const cam = new THREE.OrthographicCamera(v.fr[0], v.fr[1], v.fr[2], v.fr[3], 0.1, 100);
+      cam.position.set(...v.pos);
+      cam.up.set(...v.up);
+      // Mira al origen: con la cámara en y = 0, arriba/abajo del frustum son alturas absolutas.
+      cam.lookAt(0, 0, 0);
+      cam.updateProjectionMatrix();
+      r.setViewport(x0, SIZE - y1, x1 - x0, y1 - y0);
+      r.setScissor(x0, SIZE - y1, x1 - x0, y1 - y0);
+      r.render(scene, cam);
+    });
+    window.done = true;
+  }, 600);
+});
+</script>
+</body>
+</html>

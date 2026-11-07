@@ -409,7 +409,6 @@
   }
   const headingAt = (p) => profAt(profTh, p);
   const heightAt = (p) => profAt(profH, p);
-  const flat = () => 0;
   // Pendiente (m/m, + = subida) en la posición p.
   const slopeAt = (p) => (heightAt(p + 10) - heightAt(p - 10)) / 20;
 
@@ -643,9 +642,6 @@
     } else if (mode === 'ending') {
       S.speed = Math.max(0, S.speed - 12 * dt);
       bus.userData.setBrake(S.speed > 0);
-    } else if (mode === 'garage') {
-      S.speed = Math.max(0, S.speed - 12 * dt);
-      bus.userData.setBrake(S.speed > 0.5);
     } else if (S.attract && mode === 'title' && !twoWay()) {
       // Piloto automático para la pantalla de título (en Ruta 9 se queda en su carril).
       S.autoTimer -= dt;
@@ -660,11 +656,10 @@
 
     S.dist += S.speed * dt;
     road.scroll(S.dist);
-    // Curvas y lomas (bend3d.js). En el garaje la ruta queda derecha para ver bien el ómnibus.
-    if (mode === 'garage') Bend.update(S.dist, flat, flat);
-    else Bend.update(S.dist, headingAt, heightAt);
-    const slope = mode === 'garage' ? 0 : slopeAt(S.dist);
-    const curve = mode === 'garage' ? 0 : (headingAt(S.dist + 10) - headingAt(S.dist - 10)) / 20;
+    // Curvas y lomas (bend3d.js).
+    Bend.update(S.dist, headingAt, heightAt);
+    const slope = slopeAt(S.dist);
+    const curve = (headingAt(S.dist + 10) - headingAt(S.dist - 10)) / 20;
 
     // Dirección con inercia: la velocidad lateral sigue al carril elegido de a poco, sin pasarse.
     // Parado casi no se puede mover de costado (un ómnibus no hace "strafe").
@@ -724,7 +719,7 @@
 
     // La sombra del sol sigue al ómnibus (cubre solo la zona cercana para que sea nítida).
     // El cielo y el sol giran con el rumbo de la ruta: en una curva el sol cambia de lado de a poco.
-    const heading = mode === 'garage' ? 0 : headingAt(S.dist);
+    const heading = headingAt(S.dist);
     scene.backgroundRotation.y = scene.environmentRotation.y = heading;
     _sunDir.copy(SUN_DIR).applyAxisAngle(_up, heading);
     sun.target.position.set(S.busX, 0, -14);
@@ -733,19 +728,11 @@
     // Cámara detrás del ómnibus.
     S.shake = Math.max(0, S.shake - dt * 2.5);
     const sh = S.shake * S.shake;
-    if (mode === 'garage') {
-      // Garaje: la cámara gira alrededor del ómnibus estacionado.
-      if (!garage.drag) garage.ang += dt * 0.25;
-      const R = portrait ? 24 : 17;
-      camera.position.set(S.busX + Math.sin(garage.ang) * R, 2.2 + garage.tilt, Math.cos(garage.ang) * R);
-      camera.lookAt(S.busX, portrait ? 2.6 : 1.8, 0);
-    } else {
-      S.camX += (S.busX * 0.75 - S.camX) * Math.min(1, dt * 2.2);
-      // La cámara va sobre la ruta deformada: sigue las curvas y las lomas.
-      if (portrait) Bend.at(-20, S.camX + rand(-sh, sh), 10.5 + rand(-sh, sh), camera.position);
-      else Bend.at(-18, S.camX + rand(-sh, sh), 8.6 + rand(-sh, sh), camera.position);
-      camera.lookAt(Bend.at(portrait ? 18 : 24, S.camX * 1.1, portrait ? -2 : 1, _look));
-    }
+    S.camX += (S.busX * 0.75 - S.camX) * Math.min(1, dt * 2.2);
+    // La cámara va sobre la ruta deformada: sigue las curvas y las lomas.
+    if (portrait) Bend.at(-20, S.camX + rand(-sh, sh), 10.5 + rand(-sh, sh), camera.position);
+    else Bend.at(-18, S.camX + rand(-sh, sh), 8.6 + rand(-sh, sh), camera.position);
+    camera.lookAt(Bend.at(portrait ? 18 : 24, S.camX * 1.1, portrait ? -2 : 1, _look));
 
     if (mode === 'play' || mode === 'ending') updateHud();
   }
@@ -1070,7 +1057,10 @@
     list.forEach((r, i) => {
       const tr = el.insertRow();
       if (i === highlight) tr.className = 'me';
-      tr.insertCell().textContent = `${i + 1}. ${r.name}`;
+      const c1 = tr.insertCell();
+      c1.textContent = `${i + 1}. ${r.name} `;
+      const co = COMPANIES.find((c) => c.id === r.company);
+      if (co) { const sp = document.createElement('span'); sp.className = 'co'; sp.textContent = co.name; c1.appendChild(sp); }
       tr.insertCell().textContent = r.score;
     });
   }
@@ -1100,8 +1090,10 @@
       : control === 'tilt' ? 'Incliná el celular como un volante para cambiar de carril<br>FRENO para frenar'
       : '◀ ▶ tocá para cambiar de carril, mantené para moverte de a poco<br>FRENO para frenar';
     $('titlePrompt').textContent = touchUI ? 'Tocá un tramo para salir' : 'Tocá un tramo, o elegilo con ← → y apretá ESPACIO';
-    $('titleGarage').textContent = touchUI ? 'VER ÓMNIBUS' : 'VER ÓMNIBUS (G)';
     $('titleControl').textContent = `CONTROLES: ${control === 'tilt' ? 'INCLINACIÓN' : 'BOTONES'}`;
+    $('titleSkin').textContent = skinButtonText();
+    show('titleSkin', company().skins.length > 1);
+    $('titlePlayer').textContent = player.chosen ? `${player.name} · ${company().name.toUpperCase()} (CAMBIAR)` : 'ELEGÍ NOMBRE Y EMPRESA';
     show('titleControl', touchUI);
     const box = $('tramos');
     box.innerHTML = '';
@@ -1138,6 +1130,7 @@
 
   function startGame() {
     // En el celular, la primera vez se elige cómo manejar y después se sale.
+    if (!player.chosen) { openPlayer(startGame); return; }
     if (touchUI && !controlChosen) { openControls(startGame); return; }
     Sfx.unlock();
     Sfx.click();
@@ -1201,29 +1194,16 @@
       show('rPrompt', true);
       setTimeout(() => { canLeave = true; }, 700);
       clearTimeout(showResult.timer);
-      showResult.timer = setTimeout(() => { if (mode === 'result') goTitle(); }, 25000);
+      showResult.timer = setTimeout(() => { if (mode === 'result') leaveResult(); }, 25000);
     };
-    if (Ranking.qualifies(total)) askName((name) => done(Ranking.add(name, total)));
+    if (Ranking.qualifies(total)) done(Ranking.add(player.name || 'JUGADOR', total, player.company));
     else done(-1);
   }
 
-  function askName(onDone) {
-    const box = $('nameBox');
-    const input = $('nameInput');
-    input.value = '';
-    box.classList.remove('hidden');
-    setTimeout(() => input.focus(), 50);
-    const submit = () => {
-      const name = (input.value.trim() || 'ANÓNIMO').toUpperCase().slice(0, 12);
-      $('nameOk').onclick = null;
-      input.onkeydown = null;
-      box.classList.add('hidden');
-      input.blur();
-      Sfx.click();
-      onDone(name);
-    };
-    $('nameOk').onclick = submit;
-    input.onkeydown = (e) => { if (e.key === 'Enter') submit(); };
+  // Después de cada viaje vuelve al título y pide el próximo jugador (el anterior queda cargado).
+  function leaveResult() {
+    goTitle();
+    openPlayer(null);
   }
 
   function togglePause() {
@@ -1265,83 +1245,100 @@
     if (steer.held > TAP_TIME) S.targetX = clampX(S.busX + steer.dir * 1.2);
   }
 
-  // ---------- Garaje (previsualizador de skins) ----------
+  // ---------- Jugador: nombre y empresa ----------
+  // Al entrar, el jugador pone su nombre (va al ranking) y elige empresa. La empresa define el ómnibus:
+  // si tiene más de una skin, el botón ÓMNIBUS del título alterna entre las suyas.
   const SKINS = World3D.SKINS;
-  const SKIN_KEY = 'cot-ruta-3d-skin';
-  const garage = { idx: 0, ang: 0.9, tilt: 0, drag: null };
-  let chosenSkin = SKINS[0].id;
+  const COMPANIES = [
+    { id: 'cot', name: 'COT', color: '#f26b1d', skins: ['cot', 'cot925'] },
+    { id: 'rutas_del_sol', name: 'Rutas del Sol', color: '#1f6fd1', skins: ['rutas_del_sol'] },
+    { id: 'cynsa', name: 'CYNSA', color: '#e0301e', skins: ['cynsa'] }
+  ].map((c) => ({ ...c, skins: c.skins.filter((id) => SKINS.some((s) => s.id === id && s.available)) }))
+    .filter((c) => c.skins.length);
+  const PLAYER_KEY = 'cot-ruta-3d-player';
+  const player = { name: '', company: COMPANIES[0].id, skin: COMPANIES[0].skins[0], chosen: false };
   try {
-    const saved = localStorage.getItem(SKIN_KEY);
-    if (SKINS.some((s) => s.id === saved && s.available)) chosenSkin = saved;
-  } catch (e) { /* sin almacenamiento: se usa la skin por defecto */ }
+    const saved = JSON.parse(localStorage.getItem(PLAYER_KEY) || 'null');
+    if (saved) {
+      player.name = String(saved.name || '').slice(0, 12);
+      if (COMPANIES.some((c) => c.id === saved.company)) player.company = saved.company;
+      const co = COMPANIES.find((c) => c.id === player.company);
+      player.skin = co.skins.includes(saved.skin) ? saved.skin : co.skins[0];
+    }
+  } catch (e) { /* sin almacenamiento: se arranca de cero */ }
+  const company = () => COMPANIES.find((c) => c.id === player.company) || COMPANIES[0];
+  const savePlayer = () => {
+    try { localStorage.setItem(PLAYER_KEY, JSON.stringify({ name: player.name, company: player.company, skin: player.skin })); } catch (e) { /* no se recuerda */ }
+  };
+  let afterPlayer = null;
 
-  function openGarage() {
-    if (mode !== 'title') return;
+  function renderCompanies() {
+    const box = $('companies');
+    box.innerHTML = '';
+    COMPANIES.forEach((c) => {
+      const btn = document.createElement('button');
+      btn.className = 'choice' + (c.id === player.company ? ' on' : '');
+      btn.innerHTML = `<b>${c.name}</b><i style="background:${c.color}"></i>`;
+      btn.addEventListener('click', () => pickCompany(c.id));
+      box.appendChild(btn);
+    });
+  }
+  function pickCompany(id) {
+    if (id !== player.company) {
+      player.company = id;
+      player.skin = company().skins[0];
+    }
+    if (bus) bus.userData.setSkin(player.skin);
     Sfx.unlock();
     Sfx.click();
-    mode = 'garage';
-    clearWorld();
-    S.cars = [];
-    S.pickups = [];
-    S.lane = RIGHT;
-    S.targetX = LANE_X[RIGHT];
-    garage.idx = Math.max(0, SKINS.findIndex((s) => s.id === chosenSkin));
-    garage.ang = 0.9;
-    garage.tilt = 0;
-    show('titleScreen', false);
-    show('garageScreen', true);
-    renderGarage();
+    renderCompanies();
   }
-
-  function renderGarage() {
-    const s = SKINS[garage.idx];
-    bus.userData.setSkin(s.id);
-    $('gName').textContent = s.name;
-    $('gNote').textContent = !s.available ? 'Disponible pronto' : s.id === chosenSkin ? 'Elegido' : '';
-    $('gChoose').disabled = !s.available || s.id === chosenSkin;
-    $('gCount').textContent = `${garage.idx + 1} / ${SKINS.length}`;
+  function openPlayer(next) {
+    afterPlayer = next;
+    $('playerName').value = player.name;
+    $('playerName').classList.remove('bad');
+    renderCompanies();
+    show('playerBox', true);
+    if (!touchUI) setTimeout(() => { $('playerName').focus(); $('playerName').select(); }, 50);
   }
-
-  function cycleSkin(d) {
-    garage.idx = (garage.idx + d + SKINS.length) % SKINS.length;
+  function confirmPlayer() {
+    const name = $('playerName').value.trim().toUpperCase().slice(0, 12);
+    if (!name) { $('playerName').classList.add('bad'); $('playerName').focus(); Sfx.miss(); return; }
+    player.name = name;
+    player.chosen = true;
+    savePlayer();
+    $('playerName').blur();
+    Sfx.unlock();
     Sfx.click();
-    renderGarage();
+    show('playerBox', false);
+    if (bus) bus.userData.setSkin(player.skin);
+    renderTitle();
+    const next = afterPlayer;
+    afterPlayer = null;
+    if (next) next();
   }
+  $('playerOk').addEventListener('click', confirmPlayer);
+  $('playerName').addEventListener('keydown', (e) => { if (e.key === 'Enter') confirmPlayer(); });
+  $('playerName').addEventListener('input', () => $('playerName').classList.remove('bad'));
+  $('playerBox').addEventListener('pointerdown', (e) => e.stopPropagation());
+  $('titlePlayer').addEventListener('pointerdown', (e) => { e.stopPropagation(); if (mode === 'title') openPlayer(null); });
 
-  function chooseSkin() {
-    const s = SKINS[garage.idx];
-    if (!s.available) return;
-    chosenSkin = s.id;
-    try { localStorage.setItem(SKIN_KEY, chosenSkin); } catch (e) { /* no se guarda entre sesiones */ }
-    Sfx.board();
-    renderGarage();
+  // Botón del título: solo si la empresa tiene más de un ómnibus (COT: Primera Clase y 925).
+  function skinButtonText() {
+    const s = SKINS.find((k) => k.id === player.skin) || SKINS[0];
+    return `ÓMNIBUS: ${s.name.toUpperCase()}${touchUI ? '' : ' (O)'}`;
   }
-
-  function closeGarage() {
-    if (mode !== 'garage') return;
+  function cycleSkin() {
+    const list = company().skins;
+    if (list.length < 2) return;
+    player.skin = list[(list.indexOf(player.skin) + 1) % list.length];
+    savePlayer();
+    if (bus) bus.userData.setSkin(player.skin);
+    Sfx.unlock();
     Sfx.click();
-    bus.userData.setSkin(chosenSkin);
-    show('garageScreen', false);
-    goTitle();
+    $('titleSkin').textContent = skinButtonText();
   }
-
-  // Arrastrar (mouse o dedo) para girar la cámara alrededor del ómnibus.
-  const gView = $('garageScreen');
-  gView.addEventListener('pointerdown', (e) => {
-    if (e.target.closest('button')) return;
-    garage.drag = { x: e.clientX, y: e.clientY, ang: garage.ang, tilt: garage.tilt };
-  });
-  window.addEventListener('pointermove', (e) => {
-    if (!garage.drag) return;
-    garage.ang = garage.drag.ang - (e.clientX - garage.drag.x) * 0.008;
-    garage.tilt = Math.max(-1.5, Math.min(8, garage.drag.tilt + (e.clientY - garage.drag.y) * 0.02));
-  });
-  window.addEventListener('pointerup', () => { garage.drag = null; });
-  $('titleGarage').addEventListener('pointerdown', (e) => { e.stopPropagation(); openGarage(); });
-  $('gPrev').addEventListener('click', () => cycleSkin(-1));
-  $('gNext').addEventListener('click', () => cycleSkin(1));
-  $('gChoose').addEventListener('click', chooseSkin);
-  $('gBack').addEventListener('click', closeGarage);
+  $('titleSkin').addEventListener('pointerdown', (e) => { e.stopPropagation(); if (mode === 'title') cycleSkin(); });
 
   // ---------- Controles en el celular: botones o inclinación ----------
   // Al entrar desde un celular se elige cómo manejar. Con "inclinación" el celular es el volante:
@@ -1459,7 +1456,8 @@
   document.addEventListener('visibilitychange', () => { if (document.hidden && mode === 'play' && !paused) togglePause(); });
 
   // ---------- Entrada ----------
-  const typing = () => document.activeElement === $('nameInput');
+  // Mientras se escribe el nombre (o está abierta la pantalla del jugador) el juego no toma las teclas.
+  const typing = () => (document.activeElement && document.activeElement.tagName === 'INPUT') || !$('playerBox').classList.contains('hidden');
 
   // Los botones en pantalla solo aparecen en dispositivos táctiles.
   let touchUI = window.matchMedia('(pointer: coarse)').matches;
@@ -1481,18 +1479,11 @@
     if (e.code === 'KeyH') Sfx.horn();
     if (e.code === 'KeyP' || e.code === 'Escape') togglePause();
     const confirm = e.code === 'Space' || e.code === 'Enter';
-    if (mode === 'garage') {
-      if (e.code === 'ArrowLeft' || e.code === 'KeyA') cycleSkin(-1);
-      if (e.code === 'ArrowRight' || e.code === 'KeyD') cycleSkin(1);
-      if (confirm) chooseSkin();
-      if (e.code === 'Escape' || e.code === 'Backspace' || e.code === 'KeyG') closeGarage();
-      return;
-    }
-    if (e.code === 'KeyG' && mode === 'title') openGarage();
+    if (mode === 'title' && e.code === 'KeyO') cycleSkin();
     if (mode === 'title' && (e.code === 'ArrowLeft' || e.code === 'KeyA')) cycleRoute(-1);
     if (mode === 'title' && (e.code === 'ArrowRight' || e.code === 'KeyD')) cycleRoute(1);
     if (confirm && mode === 'title') startGame();
-    else if (confirm && mode === 'result' && canLeave) goTitle();
+    else if (confirm && mode === 'result' && canLeave) leaveResult();
     // Para el organizador del evento: Shift + B borra el ranking.
     if (e.code === 'KeyB' && e.shiftKey && mode === 'title' && window.confirm('¿Borrar todo el ranking?')) {
       Ranking.clear();
@@ -1507,7 +1498,7 @@
   window.addEventListener('blur', () => { keys.clear(); touchBrake = false; steerRelease(steer.dir); });
 
   $('titleScreen').addEventListener('pointerdown', () => { if (mode === 'title') startGame(); });
-  $('resultScreen').addEventListener('pointerdown', () => { if (mode === 'result' && canLeave) goTitle(); });
+  $('resultScreen').addEventListener('pointerdown', () => { if (mode === 'result' && canLeave) leaveResult(); });
   $('pauseScreen').addEventListener('pointerdown', togglePause);
 
   const hold = (el, down, up) => {
@@ -1522,13 +1513,14 @@
   bus = World3D.loadBus((root) => {
     scene.add(root);
     syncBlobs(root);
-    root.userData.setSkin(chosenSkin);
+    root.userData.setSkin(player.skin);
     $('loading').textContent = 'Preparando gráficos…';
     // Se espera un cuadro para que se vea el mensaje antes de compilar.
     requestAnimationFrame(() => prewarm().then(() => {
       $('loading').remove();
       goTitle();
-      if (touchUI) openControls(null);      // en el celular, lo primero es elegir cómo manejar
+      // Lo primero: nombre y empresa; en el celular, después, cómo manejar.
+      openPlayer(touchUI ? () => openControls(null) : null);
       renderer.setAnimationLoop(frame);
     }));
   });

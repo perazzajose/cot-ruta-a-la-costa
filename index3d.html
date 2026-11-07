@@ -77,37 +77,8 @@
       border: 2px solid rgba(255, 255, 255, 0.6); border-radius: 8px; padding: 9px 18px; cursor: pointer; }
     button.ghost:hover { border-color: var(--accent); color: var(--accent); }
 
-    /* Garaje */
-    #garageScreen { position: fixed; inset: 0; cursor: grab; touch-action: none; }
-    #garageScreen:active { cursor: grabbing; }
-    .gTop { position: absolute; top: 0; left: 0; right: 0; padding: 14px 16px; text-align: center; background: var(--panel);
-      font-size: 22px; font-weight: bold; }
-    .gTop small { display: block; font-size: 13px; font-weight: normal; color: var(--muted); margin-top: 4px; }
-    .gBottom { position: absolute; left: 50%; bottom: 16px; transform: translateX(-50%); width: min(460px, calc(100% - 32px));
-      background: var(--panel); border: 3px solid var(--accent); border-radius: 12px; padding: 14px; box-sizing: border-box; cursor: default; }
-    .gRow { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-    .gRow + .gRow { margin-top: 12px; }
-    .gRow .ghost { margin-top: 0; }
-    .gInfo { flex: 1; text-align: center; }
-    #gName { font-size: 22px; font-weight: bold; }
-    #gNote { font-size: 14px; color: var(--accent); min-height: 18px; margin-top: 2px; }
-    #gCount { font-size: 12px; color: var(--muted); }
-    #gPrev, #gNext { width: 54px; height: 54px; font-size: 22px; color: #fff; background: rgba(255, 255, 255, 0.12);
-      border: 2px solid rgba(255, 255, 255, 0.5); border-radius: 50%; cursor: pointer; }
-    #gChoose { flex: 1; font: bold 18px Arial, sans-serif; padding: 11px; border: 0; border-radius: 8px;
-      background: var(--accent); color: var(--ink); cursor: pointer; }
-    #gChoose:disabled { opacity: 0.45; cursor: default; }
-    #gBack { flex: 0 0 auto; }
 
     /* Nombre para el ranking */
-    #nameBox { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(0, 0, 0, 0.55); z-index: 10; }
-    #nameBox .box { background: #fff; border-radius: 14px; padding: 22px 20px; width: min(320px, calc(100% - 32px)); box-sizing: border-box;
-      text-align: center; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4); }
-    #nameBox p { margin: 0 0 14px; font-size: 20px; font-weight: bold; color: var(--brand); }
-    #nameBox input { width: 100%; box-sizing: border-box; font-size: 22px; padding: 10px; border: 2px solid var(--brand);
-      border-radius: 8px; text-align: center; text-transform: uppercase; }
-    #nameBox button { margin-top: 12px; width: 100%; font-size: 20px; font-weight: bold; padding: 10px; border: 0;
-      border-radius: 8px; background: var(--accent); color: var(--ink); cursor: pointer; }
 
     /* Celular: elegir controles, volante (modo inclinación) y pausa */
     .choice { display: block; width: 100%; margin-top: 12px; padding: 14px 12px; text-align: center; cursor: pointer;
@@ -120,6 +91,22 @@
     #controlBox .card { background: #0d1b2a; }
     #controlBox .brand { font-size: 22px; }
     #controlBox .note { margin-top: 10px; font-size: 13px; color: var(--muted); min-height: 16px; }
+    /* Jugador: nombre y empresa */
+    #playerBox { z-index: 13; background: rgba(5, 12, 20, 0.86); }
+    #playerBox .card { background: #0d1b2a; }
+    #playerBox .brand { font-size: 22px; }
+    #playerBox label { display: block; text-align: left; font-size: 13px; color: var(--muted); margin: 14px 0 6px; }
+    #playerName { width: 100%; box-sizing: border-box; font: bold 22px Arial, sans-serif; padding: 10px; border-radius: 8px;
+      border: 2px solid rgba(255, 255, 255, 0.5); background: #fff; color: var(--ink); text-align: center; text-transform: uppercase; }
+    #playerName.bad { border-color: var(--bad); }
+    #companies { display: flex; gap: 8px; }
+    #companies .choice { flex: 1; margin: 0; padding: 10px 6px; text-align: center; border-width: 3px; }
+    #companies .choice b { font-size: 16px; color: #fff; }
+    #companies .choice i { display: block; height: 8px; border-radius: 4px; margin: 8px 0 0; }
+    #companies .choice.on { border-color: var(--accent); background: rgba(242, 183, 5, 0.15); }
+    #playerOk { margin-top: 16px; width: 100%; font: bold 20px Arial, sans-serif; padding: 12px; border: 0; border-radius: 8px;
+      background: var(--accent); color: var(--ink); cursor: pointer; }
+    .rank .co { font-weight: normal; font-size: 0.8em; color: var(--muted); }
     .buttons { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
     #wheel { display: none; flex: 1; max-width: 170px; flex-direction: column; align-items: center; justify-content: center; gap: 4px; }
     #wheel .rim { width: 70px; height: 70px; border: 7px solid rgba(255, 255, 255, 0.75); border-radius: 50%; box-sizing: border-box;
@@ -233,10 +220,11 @@
       <table class="rank" id="titleRank"></table>
       <div class="buttons">
         <button id="titleControl" class="ghost hidden">CONTROLES</button>
-        <button id="titleGarage" class="ghost">VER ÓMNIBUS (G)</button>
+        <button id="titlePlayer" class="ghost">JUGADOR</button>
+        <button id="titleSkin" class="ghost">ÓMNIBUS</button>
       </div>
       <div class="prompt" id="titlePrompt">Tocá un tramo, o elegilo con ← → y apretá ESPACIO</div>
-      <div class="credit">Ómnibus: "Marcopolo g7 1200 FREE" de SquielOFICIAL (CC-BY 4.0)</div>
+      <div class="credit">Ómnibus: "Marcopolo g7 1200 FREE" de SquielOFICIAL (CC-BY 4.0) · Skin CYNSA: diseño de Maílson Amancio Pereira</div>
     </div>
   </div>
 
@@ -251,21 +239,6 @@
     </div>
   </div>
 
-  <div id="garageScreen" class="hidden">
-    <div class="gTop">ELEGÍ TU ÓMNIBUS<small>Arrastrá para girarlo · ← → para cambiar</small></div>
-    <div class="gBottom">
-      <div class="gRow">
-        <button id="gPrev" aria-label="Anterior">◀</button>
-        <div class="gInfo"><div id="gName"></div><div id="gNote"></div><div id="gCount"></div></div>
-        <button id="gNext" aria-label="Siguiente">▶</button>
-      </div>
-      <div class="gRow">
-        <button id="gBack" class="ghost">VOLVER</button>
-        <button id="gChoose">ELEGIR</button>
-      </div>
-    </div>
-  </div>
-
   <div id="pauseScreen" class="screen hidden"><div class="card">PAUSA<br><small id="pauseHint">P para seguir</small></div></div>
 
   <div id="controlBox" class="screen hidden">
@@ -277,13 +250,17 @@
     </div>
   </div>
 
-  <div id="nameBox" class="hidden">
-    <div class="box">
-      <p>¡Entraste al ranking!</p>
-      <input id="nameInput" maxlength="12" placeholder="Tu nombre" autocomplete="off">
-      <button id="nameOk">Guardar</button>
+  <div id="playerBox" class="screen hidden">
+    <div class="card">
+      <div class="brand">¿QUIÉN MANEJA?</div>
+      <label for="playerName">Tu nombre (para el ranking)</label>
+      <input id="playerName" maxlength="12" placeholder="Tu nombre" autocomplete="off">
+      <label>Elegí tu empresa</label>
+      <div id="companies"></div>
+      <button id="playerOk">¡A MANEJAR!</button>
     </div>
   </div>
+
 
   <script src="lib/three.bundle.min.js"></script>
   <script src="src3d/bend3d.js"></script>
@@ -292,8 +269,11 @@
   <script src="src/sound.js"></script>
   <script src="src/ranking.js"></script>
   <script src="src3d/busModel.js"></script>
+  <script src="src3d/skinCot925.js"></script>
   <script src="src3d/textures3d.js"></script>
   <script src="src3d/route3d.js"></script>
+  <script src="src3d/skins/rutas_del_sol.js"></script>
+  <script src="src3d/skins/cynsa.js"></script>
   <script src="src3d/world3d.js"></script>
   <script src="src3d/game3d.js"></script>
 </body>
