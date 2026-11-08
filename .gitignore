@@ -14,3 +14,7 @@ __pycache__/
 Thumbs.db
 desktop.ini
 .DS_Store
+
+# Packs y descargas originales ya procesados (el juego usa src3d/models/ y src3d/skinCot925.js)
+assets/modelos/**/*.zip
+src/cot925.zip

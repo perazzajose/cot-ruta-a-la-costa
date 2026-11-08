@@ -197,21 +197,26 @@ const World3D = (() => {
     const zc = -LEN / 2 + 40;
     const ground = plane(800, 800, mats.grass.hi, 0, -0.03, -300, 20, 80);
 
-    // Una calzada por perfil; se ve solo la del tramo elegido.
+    // Una calzada por perfil. Normalmente se ve una sola; en el cambio de perfil (Pan de Azúcar) se ven
+    // las dos, cortadas con un plano en el punto del cambio (la de atrás hasta ahí, la de adelante desde ahí).
     const decks = {};
     Object.values(ROAD_PROFILES).forEach((p) => {
       const w = p.ROAD.r - p.ROAD.l;
       const cx = (p.ROAD.l + p.ROAD.r) / 2;
-      const road = plane(w, LEN, mats.road.hi, cx, 0, zc);
+      const deckMats = { hi: mats.road.hi.clone(), mid: mats.road.mid.clone(), low: mats.road.low.clone() };
+      const clip = new THREE.Plane(new THREE.Vector3(0, 0, 1), 1e6);
+      Object.values(deckMats).forEach((m) => { m.clippingPlanes = [clip]; });
+      const road = plane(w, LEN, deckMats.hi, cx, 0, zc);
       // Recorta la UV para que el asfalto tenga la misma escala en las dos calzadas.
       const uv = road.geometry.attributes.uv;
       for (let i = 0; i < uv.count; i++) uv.setX(i, uv.getX(i) * (w / W));
       const marks = profileMarks(p);
       marks.repeat.set(1, LEN / TILE_M);
       const marksMat = new THREE.MeshStandardMaterial({ map: marks, transparent: true, roughness: 0.7, depthWrite: false });
+      marksMat.clippingPlanes = [clip];
       const lines = plane(w, LEN, marksMat, cx, 0.012, zc);
       lines.renderOrder = 1;
-      decks[p.id] = { road, lines, marks };
+      decks[p.id] = { road, lines, marks, mats: deckMats, clip };
     });
     let quality = 'hi';
 
@@ -224,11 +229,24 @@ const World3D = (() => {
       },
       setQuality(q) {
         quality = q === 'high' ? 'hi' : q === 'medium' ? 'mid' : 'low';
-        Object.values(decks).forEach((d) => { d.road.material = mats.road[quality]; });
+        Object.values(decks).forEach((d) => { d.road.material = d.mats[quality]; });
         ground.material = mats.grass[quality];
       },
       setProfile(id) {
-        Object.entries(decks).forEach(([k, d]) => { d.road.visible = d.lines.visible = k === id; });
+        Object.entries(decks).forEach(([k, d]) => {
+          d.road.visible = d.lines.visible = k === id;
+          d.clip.set(d.clip.normal.set(0, 0, 1), 1e6);       // sin corte
+        });
+      },
+      // Cambio de perfil a la vista: la calzada "behind" hasta zCut y la "ahead" desde zCut hacia adelante
+      // (z del mundo; adelante es -z). Con el mismo perfil a los dos lados, es setProfile.
+      setSplit(behind, ahead, zCut) {
+        if (behind === ahead) { this.setProfile(behind); return; }
+        Object.entries(decks).forEach(([k, d]) => {
+          d.road.visible = d.lines.visible = k === behind || k === ahead;
+          if (k === behind) d.clip.normal.set(0, 0, 1), d.clip.constant = -zCut;      // queda z >= zCut
+          else if (k === ahead) d.clip.normal.set(0, 0, -1), d.clip.constant = zCut;  // queda z <= zCut
+        });
       }
     };
   }
@@ -304,6 +322,14 @@ const World3D = (() => {
 
   // Los vehículos miran hacia -Z; la cola queda del lado +Z, mirando a la cámara.
   function makeCar(color, kind) {
+    // Con los modelos del pack cargados (models3d.js) se usan esos; si no, los simples de acá.
+    if (typeof Models3D !== 'undefined' && Models3D.ready && !kind) {
+      const mc = Models3D.car(color);
+      if (mc) {
+        mc.add(blob(mc.userData.hw * 2 + 0.8, mc.userData.hl * 2 + 1));
+        return mc;
+      }
+    }
     kind = kind || ['sedan', 'sedan', 'hatch', 'suv'][Math.floor(Math.random() * 4)];
     const p = PROFILES[kind];
     const geos = carGeos(kind);
@@ -772,6 +798,59 @@ const World3D = (() => {
     return g;
   }
 
+  // ---------- Cruce con semáforo (salidas a las ciudades) ----------
+  // Calles laterales que salen de la ruta (sides: 1 = derecha, -1 = izquierda), línea de detención antes
+  // del cruce y semáforo en ménsula sobre nuestros carriles. El frente del semáforo mira al ómnibus (+z).
+  // userData.setLight('green' | 'yellow' | 'red') cambia las luces.
+  function makeCrossing(profileId, sides = [1, -1]) {
+    const p = ROAD_PROFILES[profileId] || ROAD_PROFILES.ib;
+    const g = new THREE.Group();
+    const asphalt = std(0x3a3b3d, 0.95);
+    const STREET_W = 8, STREET_L = 70;
+    sides.forEach((side) => {
+      const edge = side > 0 ? p.ROAD.r : p.ROAD.l;
+      const st = new THREE.Mesh(new THREE.PlaneGeometry(STREET_L, STREET_W, 14, 2), asphalt);
+      st.rotation.x = -Math.PI / 2;
+      st.position.set(edge + side * STREET_L / 2, 0.006, 0);
+      st.receiveShadow = true;
+      g.add(st);
+      // Cordones de la calle.
+      [-1, 1].forEach((k) => g.add(boxMesh(std(0xb9b6ae, 0.9), STREET_L, 0.15, 0.25, edge + side * STREET_L / 2, 0.075, k * (STREET_W / 2 + 0.12))));
+    });
+    // Línea de detención en nuestros carriles, antes del cruce.
+    const ourL = profileId === 'r9' ? 0 : p.CENTER_X;
+    const stop = new THREE.Mesh(new THREE.PlaneGeometry(p.ROAD.r - 1.6 - ourL, 0.6, 2, 1), std(0xf2f2ec, 0.6));
+    stop.rotation.x = -Math.PI / 2;
+    stop.position.set((ourL + p.ROAD.r - 1.6) / 2, 0.02, STREET_W / 2 + 2);
+    g.add(stop);
+    // Semáforo: columna en la banquina derecha y brazo sobre nuestros carriles.
+    const steel = std(0x5d6670, 0.4, 0.6);
+    const poleX = p.ROAD.r + 0.8, poleZ = STREET_W / 2 + 2.5;
+    g.add(boxMesh(steel, 0.25, 6.2, 0.25, poleX, 3.1, poleZ));
+    const armL = poleX - (ourL + 1.2);
+    g.add(boxMesh(steel, armL, 0.16, 0.16, poleX - armL / 2, 6.0, poleZ));
+    const lamps = {};
+    const head = (x, y) => {
+      g.add(boxMesh(std(0x1a1a1a, 0.7), 0.75, 2.1, 0.4, x, y, poleZ + 0.1));
+      [['red', 0.65, 0xff2a1a], ['yellow', 0, 0xffc81a], ['green', -0.65, 0x2fd35a]].forEach(([k, dy, col]) => {
+        const m = new THREE.MeshStandardMaterial({ color: 0x202020, emissive: col, emissiveIntensity: 0, roughness: 0.3 });
+        const lamp = new THREE.Mesh(new THREE.CylinderGeometry(0.26, 0.26, 0.08, 14).rotateX(Math.PI / 2), m);
+        lamp.position.set(x, y + dy, poleZ + 0.3);
+        g.add(lamp);
+        (lamps[k] = lamps[k] || []).push(m);
+      });
+    };
+    head(ourL + 1.8, 4.9);         // colgado sobre los carriles
+    head(poleX - 0.05, 3.3);       // en la columna, a la altura de la vista
+    g.userData.setLight = (state) => {
+      Object.entries(lamps).forEach(([k, ms]) => ms.forEach((m) => { m.emissiveIntensity = k === state ? 1.6 : 0; }));
+    };
+    g.userData.setLight('green');
+    g.userData.stopZ = STREET_W / 2 + 2;    // línea de detención (z local; el ómnibus viene desde +z)
+    g.userData.streetW = STREET_W;
+    return g;
+  }
+
   // ---------- Sierras al fondo (Sierra de las Ánimas, Cerro Pan de Azúcar) ----------
   function makeMountain(kind) {
     const g = new THREE.Group();
@@ -927,12 +1006,35 @@ const World3D = (() => {
   // Para agregar una skin nueva: sumar una entrada con available: true, sus colores y su logo.
   const SKINS = [
     {
-      id: 'cot', name: 'COT Primera Clase', available: true, logo: 'cot',
+      id: 'cot', name: 'COT Primera Clase', available: true, logo: 'cot', number: '986',
       colors: { white: '#f2f2f0', orange: '#f26b1d', red: '#c9201a', yellow: '#f7b80f', black: '#0a0b0d' }
     },
-    { id: 'skin2', name: 'Próximamente', available: false },
-    { id: 'skin3', name: 'Próximamente', available: false }
+    {
+      // Plantilla de pintura (Proton Bus Simulator) proyectada desde cada lado. Píxeles de la imagen
+      // original (3000 px). Cada costado se calibró haciendo coincidir sus ventanas con las del modelo.
+      id: 'cot925', name: 'COT 925', available: true, tex: 'cot925',
+      proj: {
+        left: [14, 2998, 8, 756],        // costado izquierdo: x del frente, x de la cola, y del techo, y del faldón
+        right: [2986, 0, 1298, 2052],    // costado derecho (el frente queda a la derecha de la imagen)
+        sideY: [3.8, 0.33],              // altura real del techo y del faldón en esos paneles
+        roof: [2888, 22, 778, 1288],     // techo: x del frente, x de la cola, y del lado izquierdo, y del derecho
+        rear: [2280, 2998, 2040, 2808],  // cola vista de atrás: x izquierda, x derecha, y arriba, y abajo
+        rearY: [3.62, 0.62],
+        front: [2288, 1528, 2140, 2754, 2985],   // frente visto de frente: x izq., x der., filas: arriba, fin del parabrisas, abajo
+        frontY: [3.75, 1.55, 0.35]
+      }
+    },
   ];
+  // Plantilla hecha desde NUESTRO modelo (assets/plantilla-omnibus/): vistas ortográficas exactas, así
+  // lo que se pinta encima calza justo. Para una skin nueva: { id, name, available: true, tex: id, proj: PLANTILLA }.
+  const PLANTILLA = {
+    left: [0, 3000, 0, 900], right: [3000, 0, 900, 1800], sideY: [4.3, 0],
+    roof: [0, 3000, 2400, 1800],
+    rear: [0, 700, 2400, 3000], rearY: [4.0, 0.3],
+    front: [800, 1500, 2400, 2700, 3000], frontY: [4.0, 2.15, 0.3]
+  };
+  // Skins extra (src3d/skins/*.js las agregan con World3D.addSkin antes de que cargue el juego).
+  (window.EXTRA_SKINS || []).forEach((s) => SKINS.push({ available: true, proj: PLANTILLA, ...s }));
   const LOCKED_COLORS = { white: '#c9cdd1', orange: '#b4b9be', red: '#a7acb2', yellow: '#bfc3c7', black: '#15171a' };
 
   function cotLogoTex() {
@@ -951,6 +1053,22 @@ const World3D = (() => {
     });
   }
   const LOGOS = { cot: cotLogoTex };
+
+  // Imágenes de skins (window.SKIN_TEX, cargadas desde src3d/skinXXX.js). Se cargan una vez.
+  const skinTexCache = {};
+  function skinTex(id, onReady) {
+    if (skinTexCache[id]) {
+      if (onReady) { if (skinTexCache[id].image && skinTexCache[id].image.width) onReady(); else skinTexCache[id].userData.wait.push(onReady); }
+      return skinTexCache[id];
+    }
+    const src = window.SKIN_TEX && window.SKIN_TEX[id];
+    if (!src) return null;
+    const t = new THREE.TextureLoader().load(src, () => { t.userData.wait.forEach((f) => f()); t.userData.wait = []; });
+    t.userData.wait = onReady ? [onReady] : [];
+    t.colorSpace = THREE.SRGBColorSpace;
+    t.anisotropy = 8;
+    return (skinTexCache[id] = t);
+  }
   const logoCache = {};
 
   // Malla de la luneta que sigue la curva de la cola: por cada columna se lanza un rayo
@@ -999,6 +1117,43 @@ const World3D = (() => {
     return geo;
   }
 
+  // Tubo cerrado a partir de los radios de BUS_MODEL_INFO.hull (secciones a lo largo de z).
+  // tail: sección extra al final (m). rearClip [y, z]: arriba de y, la cola no pasa de z (queda detrás de la luneta).
+  function hullGeometry({ yc, na, z0, dz, r, tail = 0, rearClip = null }) {
+    const pos = [], idx = [];
+    if (tail) r = [...r, r[r.length - 1].map((v) => v * 0.96)];
+    const zAt = (s) => (s < r.length - 1 || !tail ? z0 + s * dz : z0 + (s - 1) * dz + tail);
+    r.forEach((row, s) => {
+      const z = zAt(s);
+      row.forEach((cm, k) => {
+        const a = (k / na) * Math.PI * 2, d = cm / 100;
+        const y = yc + Math.sin(a) * d;
+        pos.push(Math.cos(a) * d, y, rearClip && y > rearClip[0] ? Math.min(z, rearClip[1]) : z);
+      });
+    });
+    const S = r.length;
+    for (let s = 0; s < S - 1; s++) {
+      for (let k = 0; k < na; k++) {
+        const a = s * na + k, b = s * na + ((k + 1) % na), c = a + na, d = b + na;
+        idx.push(a, c, b, b, c, d);
+      }
+    }
+    // Tapas en las puntas (abanico desde el eje).
+    [[0, -1], [S - 1, 1]].forEach(([s, dir]) => {
+      const ci = pos.length / 3;
+      pos.push(0, yc, zAt(s));
+      for (let k = 0; k < na; k++) {
+        const a = s * na + k, b = s * na + ((k + 1) % na);
+        if (dir > 0) idx.push(ci, a, b); else idx.push(ci, b, a);
+      }
+    });
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    geo.setIndex(idx);
+    geo.computeVertexNormals();
+    return geo;
+  }
+
   // Vidrio trasero oscuro con el logo encima (COT grande y "1° Clase" debajo).
   const rearGlassCache = {};
   function rearGlassTex(logo) {
@@ -1008,8 +1163,48 @@ const World3D = (() => {
     return (rearGlassCache[logo] = canvasTex(512, 256, (c, W, H) => {
       c.fillStyle = '#0d141c';
       c.fillRect(0, 0, W, H);
-      c.drawImage(src, 0, 20, 615, 216, 100, 40, 290, 102);    // "COT"
-      c.drawImage(src, 620, 150, 404, 100, 200, 150, 150, 37); // "1° Clase"
+      c.drawImage(src, 0, 20, 615, 216, 120, 22, 330, 116);    // "COT" grande, como en la foto ("1° Clase" va en la chapa)
+    }));
+  }
+
+  // Calcos de la cola sobre la chapa (foto trasera): "1° Clase" bajo la luneta, número del coche a los
+  // costados y disco de velocidad máxima. Lienzo = cola de x -1,14 a 1,14 m y de h 2,4 (arriba) a 1,2 m.
+  const rearDecalCache = {};
+  function rearDecalTex(number) {
+    if (rearDecalCache[number]) return rearDecalCache[number];
+    return (rearDecalCache[number] = canvasTex(512, 270, (c, W, H) => {
+      c.clearRect(0, 0, W, H);
+      const yAt = (h) => ((2.4 - h) / 1.2) * H;
+      c.save();
+      c.fillStyle = '#3a3a3a';
+      c.font = 'italic 34px Georgia, serif';
+      c.textAlign = 'center';
+      c.textBaseline = 'middle';
+      c.fillText('1° Clase', W * 0.55, yAt(2.23));
+      c.fillStyle = '#ffffff';
+      c.font = 'bold 30px Arial';
+      c.fillText(number, W * 0.2, yAt(1.78));
+      c.fillText(number, W * 0.8, yAt(1.78));
+      c.beginPath(); c.arc(W * 0.8, yAt(1.47), 20, 0, Math.PI * 2);
+      c.fillStyle = '#ffffff'; c.fill();
+      c.lineWidth = 6; c.strokeStyle = '#d01818'; c.stroke();
+      c.fillStyle = '#111'; c.font = 'bold 20px Arial';
+      c.fillText('90', W * 0.8, yAt(1.47) + 1);
+      c.restore();
+    }));
+  }
+
+  // Recorta de la plantilla de una skin la zona de la luneta, con la misma cuenta que usa el shader.
+  const rearCropCache = {};
+  function rearCropTex(skin, rg) {
+    if (rearCropCache[skin.id]) return rearCropCache[skin.id];
+    const img = skinTexCache[skin.tex] && skinTexCache[skin.tex].image;
+    if (!img || !img.width) return null;
+    const pr = skin.proj, k = img.width / 3000, g = rg || { halfW: 1.05, y0: 2.5, y1: 3.4 };
+    const px = (x) => (pr.rear[0] + ((x + 1.14) / 2.28) * (pr.rear[1] - pr.rear[0])) * k;
+    const py = (h) => (pr.rear[2] + ((pr.rearY[0] - h) / (pr.rearY[0] - pr.rearY[1])) * (pr.rear[3] - pr.rear[2])) * k;
+    return (rearCropCache[skin.id] = canvasTex(512, 256, (c, W, H) => {
+      c.drawImage(img, px(-g.halfW), py(g.y1), px(g.halfW) - px(-g.halfW), py(g.y0) - py(g.y1), 0, 0, W, H);
     }));
   }
 
@@ -1020,10 +1215,17 @@ const World3D = (() => {
       uBusLen: { value: len },
       uLogo: { value: null },
       uLogoOn: { value: 0 },
+      uRearDecal: { value: null },
+      uRearDecalOn: { value: 0 },
       uLogoZR: { value: new THREE.Vector2(-2.6, 1.6) },   // lado derecho: al medio
       uLogoZL: { value: new THREE.Vector2(-4.3, -0.5) },  // lado izquierdo: detrás de la rueda delantera
       uLogoY: { value: new THREE.Vector2(1.38, 2.32) },
       uBrake: { value: 0 },
+      uTexMode: { value: 0 },
+      uSkin: { value: null },
+      uTL: { value: new THREE.Vector4() }, uTR: { value: new THREE.Vector4() }, uSideY: { value: new THREE.Vector2() },
+      uTRoof: { value: new THREE.Vector4() }, uTRear: { value: new THREE.Vector4() }, uRearY: { value: new THREE.Vector2() },
+      uTFront: { value: new THREE.Vector2() }, uFrontRows: { value: new THREE.Vector3() }, uFrontY: { value: new THREE.Vector3() },
       uWhite: { value: new THREE.Color() },
       uOrange: { value: new THREE.Color() },
       uRed: { value: new THREE.Color() },
@@ -1039,6 +1241,8 @@ varying vec3 vBusNormal;
 uniform float uBusLen;
 uniform sampler2D uLogo;
 uniform float uLogoOn;
+uniform sampler2D uRearDecal;
+uniform float uRearDecalOn;
 uniform vec2 uLogoZR;
 uniform vec2 uLogoZL;
 uniform vec2 uLogoY;
@@ -1048,6 +1252,18 @@ uniform vec3 uOrange;
 uniform vec3 uRed;
 uniform vec3 uYellow;
 uniform vec3 uBlack;
+uniform float uTexMode;
+uniform sampler2D uSkin;
+uniform vec4 uTL;
+uniform vec4 uTR;
+uniform vec2 uSideY;
+uniform vec4 uTRoof;
+uniform vec4 uTRear;
+uniform vec2 uRearY;
+uniform vec2 uTFront;
+uniform vec3 uFrontRows;
+uniform vec3 uFrontY;
+vec3 skinPx(float x, float y) { return texture2D(uSkin, vec2(x / 3000.0, 1.0 - y / 3000.0)).rgb; }
 vec3 overlay(vec3 col, vec2 uv) {
   if (uLogoOn < 0.5 || uv.x <= 0.0 || uv.x >= 1.0 || uv.y <= 0.0 || uv.y >= 1.0) return col;
   vec4 t = texture2D(uLogo, uv);
@@ -1064,7 +1280,39 @@ float headMask = 0.0;
   float u = (p.z + uBusLen * 0.5) / uBusLen;   // 0 = frente, 1 = cola
   float h = p.y;
   float side = step(0.5, abs(nrm.x));
+  // Cola por posición (no por normal): las esquinas inclinadas no cambian de regla a mitad de camino.
+  float rearFace = step(0.965, u) * step(-0.2, nrm.z);
   vec3 col = uWhite;
+  if (uTexMode > 0.5) {
+    // Skin con imagen: cada cara toma el color del panel que la mira (costado, techo, cola o frente).
+    float uu = clamp(u, 0.0, 0.95);                   // el borde de atrás de la plantilla es el contorno: no se usa
+    float fv = clamp((uSideY.x - h) / (uSideY.x - uSideY.y), 0.0, 1.0);
+    if (rearFace > 0.5) {
+      // La cola del modelo es más angosta que la de la plantilla: se usa el ancho de la cola (±1,14 m).
+      float rx = clamp((p.x + 1.14) / 2.28, 0.03, 0.97);   // sin el contorno del borde de la plantilla
+      float rv = clamp((uRearY.x - h) / (uRearY.x - uRearY.y), 0.0, 1.0);
+      col = skinPx(mix(uTRear.x, uTRear.y, rx), mix(uTRear.z, uTRear.w, rv));
+    } else if (u < 0.045 && nrm.z < -0.35) {
+      float fx = clamp((1.28 - p.x) / 2.56, 0.0, 1.0);
+      float row = h > uFrontY.y
+        ? mix(uFrontRows.x, uFrontRows.y, clamp((uFrontY.x - h) / (uFrontY.x - uFrontY.y), 0.0, 1.0))
+        : mix(uFrontRows.y, uFrontRows.z, clamp((uFrontY.y - h) / (uFrontY.y - uFrontY.z), 0.0, 1.0));
+      col = skinPx(mix(uTFront.x, uTFront.y, fx), row);
+    } else if (nrm.y > 0.75 && h > 3.5) {
+      col = skinPx(mix(uTRoof.x, uTRoof.y, uu), mix(uTRoof.z, uTRoof.w, clamp((p.x + 1.28) / 2.56, 0.0, 1.0)));
+    } else if (p.x < 0.0) {
+      col = skinPx(mix(uTL.x, uTL.y, uu), mix(uTL.z, uTL.w, fv));
+    } else {
+      col = skinPx(mix(uTR.x, uTR.y, uu), mix(uTR.z, uTR.w, fv));
+    }
+    // Lo negro de la plantilla son vidrios: brillantes. (El marrón es oscuro pero no negro.)
+    float lum = dot(col, vec3(0.3, 0.59, 0.11));
+    glassMask = (1.0 - smoothstep(0.003, 0.012, lum)) * step(1.5, h) * step(h, 3.75);
+    if (u < -0.004 && h > 1.9) col = vec3(0.015);                     // espejos negros
+    // Alero sobre la luneta (unión del techo con la cola): con el color del techo. Si no, toma el borde
+    // de la vista lateral de la plantilla (vidrio negro) estirado en la esquina.
+    if (u > 0.93 && h > 3.45) { col = skinPx(mix(uTRoof.x, uTRoof.y, 0.9), mix(uTRoof.z, uTRoof.w, 0.5)); glassMask = 0.0; }
+  } else {
   // Costados: zona naranja-roja que sube hacia atrás, filete blanco y franja amarilla.
   float B = 0.62 + smoothstep(0.22, 0.9, u) * 1.6;
   float Y = B + 0.06 + mix(0.1, 0.3, smoothstep(0.15, 0.7, u));
@@ -1078,9 +1326,7 @@ float headMask = 0.0;
   float win = step(2.3, h) * step(h, 3.4) * step(0.115, u) * step(u, 0.93) * side;
   float wind = step(u, 0.115) * step(1.55, h) * step(h, 3.62);
   // Cola (foto trasera): toda roja, luneta grande, ranura negra, franja amarilla y blanca abajo a la derecha.
-  // Cola por posición (no por normal): las esquinas inclinadas no cambian de regla a mitad de camino.
-  float rearFace = step(0.965, u) * step(-0.2, nrm.z);
-  float rearWin = rearFace * step(2.25, h) * step(h, 3.55) * step(abs(p.x), 1.12);
+  float rearWin = rearFace * step(2.4, h) * step(h, 3.55) * step(abs(p.x), 1.12);
   if (rearFace > 0.5) {
     col = mix(uOrange, uRed, 0.8);
     float sx = (p.x + 1.25) / 2.5;                                     // 0 = izquierda, 1 = derecha (vista de atrás)
@@ -1090,6 +1336,11 @@ float headMask = 0.0;
     if (abs(p.x) < 0.34 && h > 0.55 && h < 0.9) col = vec3(0.8, 0.8, 0.78);   // patente
     if (h < 0.62) col = vec3(0.012, 0.013, 0.015);                     // paragolpes y patente oscuros
     if (h > 1.93 && h < 2.1 && abs(p.x) < 0.78) col = uBlack;          // ranura bajo la luneta
+    vec2 dv = vec2((p.x + 1.14) / 2.28, (h - 1.2) / 1.2);
+    if (uRearDecalOn > 0.5 && dv.x > 0.0 && dv.x < 1.0 && dv.y > 0.0 && dv.y < 1.0) {
+      vec4 dc = texture2D(uRearDecal, dv);
+      col = mix(col, dc.rgb, dc.a);
+    }
   }
   // Hueco sobre la luneta (hasta el alero): mismo negro brillante, así se ve una luneta continua.
   float rearTop = step(0.95, u) * step(3.1, h) * step(h, 3.66) * step(abs(p.x), 1.1);
@@ -1106,6 +1357,12 @@ float headMask = 0.0;
     if (nrm.x > 0.0) lu = 1.0 - lu;
     col = overlay(col, vec2(lu, (h - uLogoY.x) / (uLogoY.y - uLogoY.x)));
   }
+  }
+#ifdef IS_HULL
+  if (u > 0.9 && h > 1.95 && h < 3.7 && uTexMode < 0.5) { col = vec3(0.004, 0.005, 0.006); glassMask = 1.0; }
+  // Con skin de imagen, lo que asoma por la unión del techo y la cola tiene el color del techo.
+  if (uTexMode > 0.5 && u > 0.9 && h > 3.45) { col = skinPx(mix(uTRoof.x, uTRoof.y, 0.9), mix(uTRoof.z, uTRoof.w, 0.5)); glassMask = 0.0; }
+#endif
   // Luces traseras verticales en las esquinas y faros delanteros.
   lightMask = rearFace * step(0.9, abs(p.x)) * step(0.85, h) * step(h, 2.15);
   headMask = step(u, 0.03) * step(nrm.z, -0.5) * step(0.8, h) * step(h, 1.12) * step(0.62, abs(p.x));
@@ -1123,13 +1380,29 @@ totalEmissiveRadiance += headMask * vec3(0.6);`);
     // Cambia colores y logo sin recompilar el shader.
     mat.userData.setSkin = (id) => {
       const skin = SKINS.find((s) => s.id === id) || SKINS[0];
-      const colors = skin.available ? skin.colors : LOCKED_COLORS;
+      const pr = skin.available && skin.tex && skinTex(skin.tex) ? skin.proj : null;
+      uniforms.uTexMode.value = pr ? 1 : 0;
+      if (pr) {
+        uniforms.uSkin.value = skinTex(skin.tex);
+        uniforms.uTL.value.set(...pr.left);
+        uniforms.uTR.value.set(...pr.right);
+        uniforms.uSideY.value.set(...pr.sideY);
+        uniforms.uTRoof.value.set(...pr.roof);
+        uniforms.uTRear.value.set(...pr.rear);
+        uniforms.uRearY.value.set(...pr.rearY);
+        uniforms.uTFront.value.set(pr.front[0], pr.front[1]);
+        uniforms.uFrontRows.value.set(pr.front[2], pr.front[3], pr.front[4]);
+        uniforms.uFrontY.value.set(...pr.frontY);
+      }
+      const colors = skin.available && skin.colors ? skin.colors : LOCKED_COLORS;
       ['white', 'orange', 'red', 'yellow', 'black'].forEach((k) => {
         uniforms['u' + k[0].toUpperCase() + k.slice(1)].value.set(colors[k]);
       });
       const logo = skin.available && skin.logo && LOGOS[skin.logo];
       if (logo && !logoCache[skin.logo]) logoCache[skin.logo] = logo();
       uniforms.uLogo.value = logo ? logoCache[skin.logo] : null;
+      uniforms.uRearDecal.value = skin.number ? rearDecalTex(skin.number) : null;
+      uniforms.uRearDecalOn.value = skin.number ? 1 : 0;
       uniforms.uLogoOn.value = logo ? 1 : 0;
     };
     mat.userData.setSkin(SKINS[0].id);
@@ -1146,6 +1419,21 @@ totalEmissiveRadiance += headMask * vec3(0.6);`);
       root.add(model);
       root.add(blob(halfW * 2 + 1.2, len + 1.6));
       root.traverse((o) => { if (o.isMesh && !o.userData.isBlob) o.castShadow = true; });
+      // Ninguna pieza del ómnibus se deforma con las curvas (bend3d.js), igual que la carrocería
+      // (que tiene su propio shader): si no, en lomas y curvas la luneta, las ruedas y las molduras
+      // se corren respecto de la carrocería. Se clonan porque materiales como TIRE los comparten los autos.
+      const keepStraight = function () { /* ómnibus: sin deformar */ };
+      const cloned = new Map();
+      root.traverse((o) => {
+        if (!o.isMesh || o.userData.isBlob || o.material.onBeforeCompile !== THREE.Material.prototype.onBeforeCompile) return;
+        if (!cloned.has(o.material)) {
+          const m = o.material.clone();
+          m.onBeforeCompile = keepStraight;
+          cloned.set(o.material, m);
+          if (liveryMat && liveryMat.userData.rearGlass === o.material) liveryMat.userData.rearGlass = m;
+        }
+        o.material = cloned.get(o.material);
+      });
       if (liveryMat) {
         const u = liveryMat.userData.uniforms;
         root.userData = {
@@ -1157,6 +1445,11 @@ totalEmissiveRadiance += headMask * vec3(0.6);`);
             if (rg) {
               const skin = SKINS.find((s) => s.id === id) || SKINS[0];
               rg.map = skin.available && skin.logo ? rearGlassTex(skin.logo) : null;
+              if (skin.available && skin.tex) {
+                rg.map = rearCropTex(skin, info.rearGlass);
+                // Si la imagen todavía no cargó, se vuelve a aplicar cuando esté.
+                if (!rg.map) skinTex(skin.tex, () => root.userData.setSkin(id));
+              }
               rg.color.set(rg.map ? 0xffffff : 0x0d141c);
               rg.needsUpdate = true;
             }
@@ -1209,7 +1502,7 @@ totalEmissiveRadiance += headMask * vec3(0.6);`);
         if (info.prepared) {
           const len = info.length || 12;
           const livery = info.livery === 'cot' ? liveryMaterial(len) : paint(0xf4f4f2);
-          const grille = std(0x1a1c1f, 0.35, 0.6);
+          const grille = std(0x141517, 0.7, 0.15);   // molduras: poco brillo (de cerca se ven facetadas)
           model.traverse((o) => {
             if (!o.isMesh) return;
             const name = o.material.name || '';
@@ -1229,14 +1522,28 @@ totalEmissiveRadiance += headMask * vec3(0.6);`);
           rearGlassMat.polygonOffset = true;
           rearGlassMat.polygonOffsetFactor = -2;
           rearGlassMat.polygonOffsetUnits = -2;
-          // Rellenos oscuros detrás de zonas con agujeros (el paragolpes perdió piezas al simplificar).
-          (info.fillers || []).forEach(([x0, x1, y0, y1, z0, z1]) => {
-            model.add(boxMesh(std(0x0b0c0e, 0.8), x1 - x0, y1 - y0, z1 - z0, (x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2));
-          });
-          // La luneta se calca sobre la cola (curva) antes de agregar los demás vidrios.
+          // La luneta se calca sobre la cola (curva) antes de agregar vidrios y rellenos,
+          // así los rayos solo tocan la carrocería.
           if (info.rearGlass) {
             const rg = conformRearGlass(model, info.rearGlass);
             if (rg) model.add(new THREE.Mesh(rg, rearGlassMat));
+          }
+          // Segunda piel interior con la misma librea: tapa los agujeros del modelo.
+          // Usa los mismos uniforms (cambia de skin junto con la carrocería); IS_HULL pinta de vidrio
+          // la tapa trasera a la altura de la ventana, que en el modelo baja más que la luneta.
+          if (info.hull) {
+            const hullMat = livery.clone();
+            hullMat.onBeforeCompile = livery.onBeforeCompile;
+            hullMat.defines = { IS_HULL: 1 };
+            hullMat.side = THREE.DoubleSide;
+            model.add(new THREE.Mesh(hullGeometry(info.hull), hullMat));
+            // Bloques oscuros extra por dentro (el paragolpes baja más que la segunda piel).
+            (info.hullBoxes || []).forEach(([x0, x1, y0, y1, z0, z1]) => {
+              const m = new THREE.Mesh(G.box, std(0x0b0c0e, 0.8));
+              m.scale.set(x1 - x0, y1 - y0, z1 - z0);
+              m.position.set((x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2);
+              model.add(m);
+            });
           }
           (info.glass || []).forEach((q) => {
             const geo = new THREE.BufferGeometry();
@@ -1287,6 +1594,6 @@ totalEmissiveRadiance += headMask * vec3(0.6);`);
     setProfile(id) { P = ROAD_PROFILES[id] || ROAD_PROFILES.ib; },
     createRoad, createWater, makeCar, makeTruck, makeMoto, makeDeco, rowParts, makeKmSign,
     makeArroyoSign, makeLocalitySign, makeWarningSign, makePeaje, makeMountain, makeFortaleza,
-    makeStopZone, makeShelter, makePerson, makeMate, makeParcel, makeTerminal, loadBus
+    makeStopZone, makeShelter, makePerson, makeMate, makeParcel, makeTerminal, loadBus, makeCrossing
   };
 })();

@@ -6,7 +6,7 @@
   const LANES = LANE_X.map((_, i) => i);
   const RIGHT = LANE_X.length - 1;      // carril derecho (paradas)
   const M_PER_KM = 40;                  // ritmo del juego (huecos, avisos): un "km" de juego son 40 m
-  const TRIP_M = 5200;                  // todos los tramos duran lo mismo (~2-3 minutos)
+  const SEG_M = 5200;                   // cada pedazo del viaje (Interbalnearia, Ruta 9 hasta Rocha, Rocha-Chuy)
   // Física de ómnibus: pesado, acelera despacio, frena con distancia y dobla con inercia.
   const MAX_SPEED = 40;
   const ACCEL = 6.5;                    // 0 a 90 km/h en ~6 s
@@ -15,26 +15,31 @@
   const LAT_ACC = 4.5;                  // qué tan rápido gira el volante (m/s²)
   const STOP_SPEED = 9;                 // 20 km/h mostrados
   const KMH = 90 / MAX_SPEED;
-  const TARGET_TIME = 180;
+  const TARGET_TIME = 540;              // el viaje completo dura unos 9 minutos
   const SPAWN_AHEAD = 280;
   // Ruta 9 (un carril por mano): los que van en nuestro sentido van más lento y los de frente
   // aparecen más lejos, porque se acercan rápido.
   const R9_SPEED = { truck: 12, car: 16, moto: 17 };
   const ONCOMING_AHEAD = 340;
 
-  // ---------- Tramo elegido (route3d.js) ----------
-  // Cada tramo se estira a TRIP_M metros: los km de los carteles son los reales de la ruta.
-  const TRAMO_KEY = 'cot-ruta-3d-tramo';
-  let R = ROUTES3D[0];
-  let mPerKm = TRIP_M / (R.to - R.from);
-  const kmAt = (pos) => R.from + pos / mPerKm;
-  const posAt = (km) => (km - R.from) * mPerKm;
-  const twoWay = () => R.profile === 'r9';
+  // ---------- Viaje completo Tres Cruces → Chuy (ROUTE_FULL en route3d.js) ----------
+  // Cada segmento (Interbalnearia, Ruta 9 hasta Rocha, Rocha → Chuy) se estira a SEG_M metros de juego:
+  // los km de los carteles son los oficiales de la ruta (saltan de 97 a 107 en Pan de Azúcar).
+  const R = ROUTE_FULL;
+  const SEGS = R.segments.map((g, i) => ({ ...g, p0: i * SEG_M, p1: (i + 1) * SEG_M, mPerKm: SEG_M / (g.to - g.from) }));
+  const TRIP_M = SEG_M * SEGS.length;
+  const segAtPos = (pos) => SEGS[Math.max(0, Math.min(SEGS.length - 1, Math.floor(pos / SEG_M)))];
+  const segAtKm = (km) => SEGS.find((g) => km < g.to) || SEGS[SEGS.length - 1];
+  const kmAt = (pos) => { const g = segAtPos(pos); return g.from + (pos - g.p0) / g.mPerKm; };
+  const posAt = (km) => { const g = segAtKm(km); return g.p0 + Math.max(0, km - g.from) * g.mPerKm; };
+  const profileAt = (pos) => segAtPos(pos).profile;
+  const roadAt = (pos) => World3D.ROAD_PROFILES[profileAt(pos)];
+  // Ruta 9 (un carril por mano) en esa posición; sin argumento, donde está el ómnibus.
+  const twoWay = (pos) => profileAt(pos === undefined ? (S ? S.dist : 0) : pos) === 'r9';
+  // Donde termina la Interbalnearia y empieza Ruta 9 (cambio de perfil de la calzada).
+  const PROFILE_CHANGES = SEGS.filter((g, i) => i > 0 && SEGS[i - 1].profile !== g.profile)
+    .map((g) => ({ pos: g.p0, behind: SEGS[SEGS.indexOf(g) - 1].profile, ahead: g.profile }));
   const kmText = (km) => String(Math.round(km * 10) / 10).replace('.', ',');
-  try {
-    const saved = localStorage.getItem(TRAMO_KEY);
-    R = ROUTES3D.find((r) => r.id === saved) || R;
-  } catch (e) { /* sin almacenamiento: arranca en el primer tramo */ }
 
   const $ = (id) => document.getElementById(id);
   const rand = (a, b) => a + Math.random() * (b - a);
@@ -76,6 +81,7 @@
   const renderer = new THREE.WebGLRenderer({ antialias: !GFX_LEVELS[gfx.level].short, powerPreference: 'high-performance' });
   renderer.setPixelRatio(pixelRatio);
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.localClippingEnabled = true;     // corte de la calzada en el cambio de perfil (Pan de Azúcar)
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   $('view').appendChild(renderer.domElement);
 
@@ -228,21 +234,101 @@
     const t = d.userData.type;
     const km = kmAt(pos);
     const near = t === 'pond' ? 10 : 0;      // los charcos son anchos: más lejos del alambrado
-    const left = World3D.P.ROAD.l;
+    const left = roadAt(pos).ROAD.l;
     const ranges = {
       1: [13 + near, waterAt(km, 1) ? World3D.WATER_NEAR - 4 : 36 + near],
       [-1]: [-(left - 4.8 - near), waterAt(km, -1) ? World3D.WATER_NEAR - 4 : 45 + near]
     };
+    const bio = biomeAt(km);
+    const woody = t === 'tree' || t === 'eucalyptus' || t === 'pine' || t === 'umbrellaPine';
+    if (bio.monte && woody) {
+      // Monte: los árboles arrancan justo detrás del alambrado y no se van lejos.
+      ranges[1] = [ranges[1][0] - 0.5, Math.min(ranges[1][1], ranges[1][0] + 16)];
+      ranges[-1] = [ranges[-1][0] - 0.5, Math.min(ranges[-1][1], ranges[-1][0] + 16)];
+    }
     let side = Math.random() < 0.5 ? 1 : -1;
     if (ranges[side][1] < ranges[side][0]) side = -side;
+    if (d.userData.forest) {
+      // Bosque extra: solo fuera de las ciudades, tupido cerca del alambrado y raleando hacia el fondo.
+      const dens = bio.lights ? 0 : bio.forest ?? 1;
+      const kind = d.userData.model.startsWith('pine') ? (bio.weights.pine || bio.weights.umbrellaPine ? 1 : 0.7) : 1;
+      const [a, b] = [ranges[side][0] - 0.5, Math.max(ranges[side][0], Math.min(ranges[side][1], 60))];
+      d.userData.pos = pos;
+      d.position.x = side * (a + (b - a) * Math.pow(Math.random(), 1.6));
+      d.rotation.y = rand(0, Math.PI * 2);
+      d.scale.setScalar(rand(0.8, 1.35));
+      d.userData.biomeOK = Math.random() < dens * kind && !crossingNear(pos) && b >= a;
+      d.visible = d.userData.biomeOK && (!GFX_LEVELS[gfx.level].short || d.userData.idx % 2 === 0);
+      return;
+    }
+    // Las calles de los cruces con semáforo quedan libres (ni casas ni árboles encima).
+    if (crossingNear(pos)) { d.userData.pos = pos; d.userData.biomeOK = false; d.visible = false; return; }
+    // Delante de un cartel de letras (lado derecho) no va nada: que se lea desde el ómnibus.
+    if (side === 1 && R.landmarks.some((l) => l.type === 'letters' && (l.side || 1) === 1 && pos > posAt(l.km) - 90 && pos < posAt(l.km) + 25)) {
+      if (ranges[-1][1] >= ranges[-1][0]) side = -1;
+      else { d.userData.pos = pos; d.userData.biomeOK = false; d.visible = false; return; }
+    }
     const [a, b] = ranges[side];
     d.userData.pos = pos;
     d.position.x = side * rand(a, Math.max(a, b));
     d.rotation.y = t === 'house' ? pick([0, Math.PI / 2, Math.PI, -Math.PI / 2]) : rand(0, Math.PI * 2);
     d.scale.setScalar(t === 'house' ? 1 : rand(0.8, 1.25));
-    const w = Math.min(1, (biomeAt(km).weights[t] || 0) / 4);
+    const w = bio.monte && woody ? 1 : Math.min(1, (bio.weights[t] || 0) / 4);
     d.userData.biomeOK = Math.random() < w && ranges[side][1] >= ranges[side][0];
     d.visible = d.userData.biomeOK && (!GFX_LEVELS[gfx.level].short || d.userData.idx % 2 === 0);
+  }
+
+  // Tipos de decoración que usan modelos del pack (variantes). Se dibujan con InstancedMesh: cada
+  // árbol o casa es un objeto liviano (sin malla) y todas las copias de un modelo van en un solo dibujo.
+  const DECO_MODELS = {
+    tree: ['tree1', 'tree2'], eucalyptus: ['tree3'], pine: ['pine1', 'pine3'],
+    house: ['house1', 'house2', 'house3', 'house4', 'house5']
+  };
+  const modelVariants = (t) => (DECO_MODELS[t] || []).filter((k) => Models3D.has(k));
+  // Bosque fuera de las ciudades (aparte de la decoración de cada zona). Con "distancia corta" se ve la mitad.
+  // Sobre todo el pino liviano (pine1, ~1.600 triángulos); los demás tienen el doble. Sin sombras.
+  const FOREST_MODELS = ['pine1', 'tree2', 'pine1', 'tree3', 'tree2', 'pine1'];
+  const FOREST_N = 100;
+  // Posiciones de juego de los cruces con semáforo (la calle ocupa unos 8 m; se deja margen).
+  const CROSSINGS = R.landmarks.filter((l) => l.type === 'semaforo').map((l) => posAt(l.km));
+  const crossingNear = (pos) => CROSSINGS.some((c) => Math.abs(pos - c) < 9);
+  const decoPools = {};
+
+  function makeDecoItem(t, i) {
+    const v = modelVariants(t);
+    if (!v.length) return noCull(World3D.makeDeco(t));
+    const o = new THREE.Object3D();
+    o.userData.model = v[i % v.length];
+    return o;
+  }
+
+  // Un InstancedMesh por parte de cada modelo usado en el tramo.
+  function buildPools(items, shadow = true) {
+    const byModel = {};
+    items.forEach((d) => { if (d.userData.model) (byModel[d.userData.model] = byModel[d.userData.model] || []).push(d); });
+    return Object.entries(byModel).map(([key, proxies]) => ({
+      proxies,
+      meshes: Models3D.parts(key).map((p) => {
+        const im = new THREE.InstancedMesh(p.geo, p.mat, proxies.length);
+        im.castShadow = shadow;
+        im.frustumCulled = false;
+        im.count = 0;
+        return im;
+      })
+    }));
+  }
+
+  function updatePools() {
+    for (const pool of decoPools[R.id] || []) {
+      let n = 0;
+      for (const d of pool.proxies) {
+        if (!d.visible) continue;
+        d.updateMatrix();
+        for (const im of pool.meshes) im.setMatrixAt(n, d.matrix);
+        n++;
+      }
+      for (const im of pool.meshes) { im.count = n; im.instanceMatrix.needsUpdate = true; }
+    }
   }
 
   // Decoración de cada tramo: los tipos que usa su paisaje, más copias de los que más pesan.
@@ -251,22 +337,42 @@
   function buildDecos() {
     decos.forEach((d) => scene.remove(d));
     decos.length = 0;
+    Object.values(decoPools).forEach((list) => list.forEach((p) => p.meshes.forEach((m) => scene.remove(m))));
     if (!decoSets[R.id]) {
       const maxW = {};
       R.biomes.forEach((b) => Object.entries(b.weights).forEach(([t, w]) => { maxW[t] = Math.max(maxW[t] || 0, w); }));
       const types = [];
       Object.entries(maxW).forEach(([t, w]) => { for (let k = 0; k < Math.ceil(w); k++) types.push(t); });
       types.sort(() => Math.random() - 0.5);
-      // Unas 4 copias por unidad de peso: la misma densidad en todos los tramos.
-      decoSets[R.id] = Array.from({ length: Math.max(90, Math.round(types.length * 3.75)) }, (_, i) => {
+      // Unas 4 copias por unidad de peso: la misma densidad en todos los tramos. Los tramos con montes
+      // llevan más árboles (con instancing casi no cuesta).
+      const extra = R.biomes.some((b) => b.monte) ? 1.8 : 1;
+      decoSets[R.id] = Array.from({ length: Math.round(Math.max(90, types.length * 3.75) * extra) }, (_, i) => {
         const t = types[i % types.length];
-        const d = noCull(World3D.makeDeco(t));
+        const d = makeDecoItem(t, i);
         d.userData.type = t;
         d.userData.idx = i;
         return d;
       });
+      const forest = FOREST_MODELS.filter((k) => Models3D.has(k));
+      if (forest.length) {
+        for (let i = 0; i < FOREST_N; i++) {
+          const d = new THREE.Object3D();
+          d.userData.model = forest[i % forest.length];
+          d.userData.type = 'tree';
+          d.userData.forest = true;
+          d.userData.idx = i;
+          decoSets[R.id].push(d);
+        }
+      }
     }
-    decoSets[R.id].forEach((d) => { scene.add(d); decos.push(d); });
+    if (!decoPools[R.id]) {
+      const set = decoSets[R.id];
+      decoPools[R.id] = buildPools(set.filter((d) => !d.userData.forest))
+        .concat(buildPools(set.filter((d) => d.userData.forest), false));
+    }
+    decoSets[R.id].forEach((d) => { if (!d.userData.model) scene.add(d); decos.push(d); });
+    decoPools[R.id].forEach((p) => p.meshes.forEach((m) => scene.add(m)));
   }
 
   // Cerros del fondo (Sierra de las Ánimas, Pan de Azúcar...): se acercan y pasan de costado en su tramo.
@@ -324,19 +430,25 @@
     decos.forEach((d) => placeDeco(d, S.dist + rand(-25, 300)));
   }
 
-  // Cambia el tramo: perfil de la ruta, paisaje, cerros y ranking.
-  function setRoute(id) {
-    R = ROUTES3D.find((r) => r.id === id) || ROUTES3D[0];
-    mPerKm = TRIP_M / (R.to - R.from);
-    World3D.setProfile(R.profile);
-    road.setProfile(R.profile);
-    // El ranking es por tramo (el de la Interbalnearia conserva la clave de antes).
-    Ranking.KEY = 'cot-ruta-3d-ranking' + (R.id === 'ib' ? '' : '-' + R.id);
+  // Arma el viaje: paisaje, cerros, curvas y ranking (uno solo, del viaje completo).
+  function setupRoute() {
+    Ranking.KEY = 'cot-ruta-3d-ranking-completo';
     buildDecos();
     buildBackdrops();
     buildProfile();
-    oncoming.forEach((c) => { c.visible = !twoWay(); });
-    try { localStorage.setItem(TRAMO_KEY, R.id); } catch (e) { /* no se recuerda el tramo */ }
+    updateRoadProfile();
+  }
+
+  // Calzada según dónde está el ómnibus. Cerca de Pan de Azúcar se ven las dos: la Interbalnearia hasta
+  // el punto del cambio y Ruta 9 desde ahí (corte con un plano, ver createRoad en world3d.js).
+  let curProfile = null;
+  function updateRoadProfile() {
+    const dist = S ? S.dist : 0;
+    const here = profileAt(dist);
+    if (here !== curProfile) { curProfile = here; World3D.setProfile(here); }
+    const ch = PROFILE_CHANGES.find((c) => c.pos - dist > -120 && c.pos - dist < 900);
+    if (ch) road.setSplit(ch.behind, ch.ahead, -(ch.pos - dist));
+    else road.setProfile(here);
   }
 
   // ---------- Curvas y lomas del tramo ----------
@@ -367,11 +479,15 @@
     const maxTurn = PROF_STEP / MIN_RADIUS, maxRise = PROF_STEP * MAX_GRADE;
     const real = typeof RutaReal !== 'undefined' && RutaReal && R.real;
     if (real) {
-      const a = R.real[0] * 1000, b = R.real[1] * 1000, ratio = (b - a) / TRIP_M;
-      const sAt = (i) => Math.min(RutaReal.largo, Math.max(0, a + (i * PROF_STEP - PROF_PRE) * ratio));
+      // Cada segmento del juego toma su pedazo del trazado real (g.real, en km recorridos).
+      const ratioAt = (g) => (g.real[1] - g.real[0]) * 1000 / SEG_M;
+      const sAt = (i) => {
+        const p = i * PROF_STEP - PROF_PRE, g = segAtPos(p);
+        return Math.min(RutaReal.largo, Math.max(0, g.real[0] * 1000 + (p - g.p0) * ratioAt(g)));
+      };
       const v = new THREE.Vector3();
       // Rumbo real promediado sobre el pedazo de ruta que representa cada muestra.
-      const span = Math.max(30, ratio * PROF_STEP);
+      const span = Math.max(30, ratioAt(SEGS[0]) * PROF_STEP);
       const headingAt = (s) => { RutaReal.direccionEn(s, v, span); return Math.atan2(v.x, -v.z); };
       const heightAt = (s) => RutaReal.posicionEn(s, v).y;
       let prevH = headingAt(sAt(0)), prevY = heightAt(sAt(0));
@@ -409,7 +525,6 @@
   }
   const headingAt = (p) => profAt(profTh, p);
   const heightAt = (p) => profAt(profH, p);
-  const flat = () => 0;
   // Pendiente (m/m, + = subida) en la posición p.
   const slopeAt = (p) => (heightAt(p + 10) - heightAt(p - 10)) / 20;
 
@@ -420,12 +535,12 @@
       const base = Math.ceil((S.dist - 30) / r.gap) * r.gap;
       for (const { im, offs } of r.meshes) {
         let k = 0;
-        const x = r.left !== undefined ? World3D.P.ROAD.l + r.left : r.x;
         for (let i = 0; i < r.n; i++) {
           const pos = base + i * r.gap;
           const z = -(pos - S.dist);
+          const x = r.left !== undefined ? roadAt(pos).ROAD.l + r.left : r.x;
           // Fuera de la zona con alumbrado, la columna se achica a cero (no se dibuja).
-          const on = !r.lights || biomeAt(kmAt(pos)).lights;
+          const on = (!r.lights || biomeAt(kmAt(pos)).lights) && (r.type === 'lightPole' || !crossingNear(pos));
           for (const o of offs) {
             _p.set(x + o[0], o[1], z + o[2]);
             if (on) _s.set(o[3], o[4], o[5]); else _s.set(0, 0, 0);
@@ -455,10 +570,12 @@
       if (d.userData.pos < S.dist - 30) placeDeco(d, S.dist + rand(240, 300));
       d.position.z = -(d.userData.pos - S.dist);
     }
+    updatePools();
     for (const c of oncoming) {
       c.userData.pos -= 30 * dt;
       if (c.userData.pos < S.dist - 30) c.userData.pos = S.dist + rand(300, 600);
       c.position.z = -(c.userData.pos - S.dist);
+      c.visible = profileAt(c.userData.pos) === 'ib';
     }
   }
 
@@ -492,7 +609,7 @@
   }
 
   function spawnCars() {
-    if (twoWay()) { spawnSlowCar(); return; }
+    if (twoWay(S.dist + SPAWN_AHEAD)) { spawnSlowCar(); return; }
     const p = S.dist / TRIP_M;
     // Con 2 carriles, dos autos a la vez cierran la ruta: pasa poco y obliga a frenar.
     const count = Math.random() < 0.03 + 0.07 * p ? 2 : 1;
@@ -541,10 +658,22 @@
     m.spawned = true;
     let obj;
     if (m.type === 'locality') { obj = World3D.makeLocalitySign(m.text, m.icon); obj.position.x = 7.9; }
-    else if (m.type === 'arroyo') { obj = World3D.makeArroyoSign(m.name, m.km, R.shield); obj.position.x = 7.6; }
+    else if (m.type === 'arroyo') { obj = World3D.makeArroyoSign(m.name, m.km, m.shield); obj.position.x = 7.6; }
+    else if (m.type === 'semaforo') {
+      obj = World3D.makeCrossing(m.profile, m.sides);
+      m.light = 'green';
+      m.wait = Math.random() < 0.8;      // la mayoría de las veces te agarra en rojo
+      m.sideCars = 0;
+    }
     else if (m.type === 'warning') { obj = World3D.makeWarningSign(m.l1, m.l2); obj.position.x = 7.4; }
     else if (m.type === 'peaje') { obj = World3D.makePeaje(m.name); }
     else if (m.type === 'fortaleza') { obj = World3D.makeFortaleza(); obj.position.x = 75; obj.rotation.y = 0.3; }
+    else if (m.type === 'letters' && Models3D.hasLetters()) {
+      // Letras de colores sobre el pasto, giradas hacia la ruta para que se lean desde el ómnibus.
+      obj = Models3D.letters(m.text, m.text.length > 12 ? 3.4 : 4.4);
+      obj.position.x = (m.side || 1) * (13.5 + obj.userData.width * 0.42);
+      obj.rotation.y = (m.side || 1) * -0.6;
+    }
     if (obj) m.obj = addWorld(obj, m.pos);
   }
 
@@ -568,8 +697,11 @@
   function spawnStuff() {
     const ahead = S.dist + SPAWN_AHEAD;
     if (!S.attract) {
+      // Salto de km en Pan de Azúcar (Interbalnearia km 97 → Ruta 9 km 107): sin mojones en el hueco.
+      const gap = SEGS.find((g, i) => i > 0 && S.nextKmSign > SEGS[i - 1].to && S.nextKmSign < g.from);
+      if (gap) S.nextKmSign = Math.ceil(gap.from / 10) * 10;
       if (S.nextKmSign < R.to && posAt(S.nextKmSign) < ahead) {
-        const sign = World3D.makeKmSign(S.nextKmSign, R.shield);
+        const sign = World3D.makeKmSign(S.nextKmSign, segAtKm(S.nextKmSign).shield);
         sign.position.x = 7.2;
         addWorld(sign, posAt(S.nextKmSign));
         S.nextKmSign += 10;
@@ -593,7 +725,7 @@
     const nearEnd = S.dist > TRIP_M - 2 * M_PER_KM;
     if (mode !== 'ending' && !nearEnd) {
       if (S.dist >= S.nextCarAt) spawnCars();
-      if (twoWay() && S.dist >= S.nextOncomingAt) spawnOncoming();
+      if (twoWay(S.dist + ONCOMING_AHEAD) && S.dist >= S.nextOncomingAt) spawnOncoming();
       if (!S.attract && S.dist >= S.nextPickupAt) spawnPickup();
     }
   }
@@ -643,9 +775,6 @@
     } else if (mode === 'ending') {
       S.speed = Math.max(0, S.speed - 12 * dt);
       bus.userData.setBrake(S.speed > 0);
-    } else if (mode === 'garage') {
-      S.speed = Math.max(0, S.speed - 12 * dt);
-      bus.userData.setBrake(S.speed > 0.5);
     } else if (S.attract && mode === 'title' && !twoWay()) {
       // Piloto automático para la pantalla de título (en Ruta 9 se queda en su carril).
       S.autoTimer -= dt;
@@ -660,11 +789,11 @@
 
     S.dist += S.speed * dt;
     road.scroll(S.dist);
-    // Curvas y lomas (bend3d.js). En el garaje la ruta queda derecha para ver bien el ómnibus.
-    if (mode === 'garage') Bend.update(S.dist, flat, flat);
-    else Bend.update(S.dist, headingAt, heightAt);
-    const slope = mode === 'garage' ? 0 : slopeAt(S.dist);
-    const curve = mode === 'garage' ? 0 : (headingAt(S.dist + 10) - headingAt(S.dist - 10)) / 20;
+    updateRoadProfile();
+    // Curvas y lomas (bend3d.js).
+    Bend.update(S.dist, headingAt, heightAt);
+    const slope = slopeAt(S.dist);
+    const curve = (headingAt(S.dist + 10) - headingAt(S.dist - 10)) / 20;
 
     // Dirección con inercia: la velocidad lateral sigue al carril elegido de a poco, sin pasarse.
     // Parado casi no se puede mover de costado (un ómnibus no hace "strafe").
@@ -711,6 +840,8 @@
     }
     S.cars = S.cars.filter((c) => !c.userData.dead);
     S.pickups = S.pickups.filter((c) => !c.userData.dead);
+    updateCrossings(dt);
+    updateTraffic(dt);
     updateDecos(dt);
     updateAnims(dt);
 
@@ -719,12 +850,13 @@
       checkPickups();
       checkStops();
       checkPeajes();
+      checkCrossings();
       if (S.dist >= TRIP_M) finish(true);
     }
 
     // La sombra del sol sigue al ómnibus (cubre solo la zona cercana para que sea nítida).
     // El cielo y el sol giran con el rumbo de la ruta: en una curva el sol cambia de lado de a poco.
-    const heading = mode === 'garage' ? 0 : headingAt(S.dist);
+    const heading = headingAt(S.dist);
     scene.backgroundRotation.y = scene.environmentRotation.y = heading;
     _sunDir.copy(SUN_DIR).applyAxisAngle(_up, heading);
     sun.target.position.set(S.busX, 0, -14);
@@ -733,21 +865,150 @@
     // Cámara detrás del ómnibus.
     S.shake = Math.max(0, S.shake - dt * 2.5);
     const sh = S.shake * S.shake;
-    if (mode === 'garage') {
-      // Garaje: la cámara gira alrededor del ómnibus estacionado.
-      if (!garage.drag) garage.ang += dt * 0.25;
-      const R = portrait ? 24 : 17;
-      camera.position.set(S.busX + Math.sin(garage.ang) * R, 2.2 + garage.tilt, Math.cos(garage.ang) * R);
-      camera.lookAt(S.busX, portrait ? 2.6 : 1.8, 0);
-    } else {
-      S.camX += (S.busX * 0.75 - S.camX) * Math.min(1, dt * 2.2);
-      // La cámara va sobre la ruta deformada: sigue las curvas y las lomas.
-      if (portrait) Bend.at(-20, S.camX + rand(-sh, sh), 10.5 + rand(-sh, sh), camera.position);
-      else Bend.at(-18, S.camX + rand(-sh, sh), 8.6 + rand(-sh, sh), camera.position);
-      camera.lookAt(Bend.at(portrait ? 18 : 24, S.camX * 1.1, portrait ? -2 : 1, _look));
-    }
+    S.camX += (S.busX * 0.75 - S.camX) * Math.min(1, dt * 2.2);
+    // La cámara va sobre la ruta deformada: sigue las curvas y las lomas.
+    if (portrait) Bend.at(-20, S.camX + rand(-sh, sh), 10.5 + rand(-sh, sh), camera.position);
+    else Bend.at(-18, S.camX + rand(-sh, sh), 8.6 + rand(-sh, sh), camera.position);
+    camera.lookAt(Bend.at(portrait ? 18 : 24, S.camX * 1.1, portrait ? -2 : 1, _look));
 
     if (mode === 'play' || mode === 'ending') updateHud();
+  }
+
+  // ---------- Semáforos ----------
+  // Cada cruce (landmark 'semaforo') cambia cuando se acerca el ómnibus: amarillo, rojo y verde otra vez.
+  // El rojo dura por lo menos RED_MIN segundos y hasta que el ómnibus estuvo parado un rato en la línea.
+  // Mientras está en rojo salen autos de las calles: uno dobla hacia nuestro carril derecho y otro cruza.
+  const YELLOW_T = 2.6, RED_MIN = 6, RED_STOPPED = 3;
+  const STOP_BACK = 6;                   // la línea de detención está 6 m antes del centro del cruce
+  const crossings = () => S.marks.filter((m) => m.type === 'semaforo' && m.obj);
+  function setLight(m, state) {
+    m.light = state;
+    m.timer = 0;
+    m.obj.userData.setLight(state);
+  }
+
+  function updateCrossings(dt) {
+    for (const m of crossings()) {
+      const d = m.pos - STOP_BACK - S.dist;     // del ómnibus (su centro) a la línea
+      m.timer = (m.timer || 0) + dt;
+      if (m.light === 'green' && m.wait && !m.cycled && d < 175 && d > 40) setLight(m, 'yellow');
+      else if (m.light === 'yellow' && m.timer > YELLOW_T) { setLight(m, 'red'); m.stopped = 0; }
+      else if (m.light === 'red') {
+        if (S.speed < 1 && d < 110) m.stopped += dt;      // con autos esperando adelante, frena más atrás
+        if (m.timer > 1.2 && m.sideCars < 1) spawnSideCar(m, 1);
+        if (m.timer > 2.4 && m.sideCars < 2 && m.sides.includes(-1)) spawnSideCar(m, -1);
+        if ((m.timer > RED_MIN && m.stopped > RED_STOPPED) || d < -20 || m.timer > 25) { setLight(m, 'green'); m.cycled = true; }
+      }
+    }
+  }
+
+  // Auto que sale de una calle lateral. side 1: dobla desde la derecha y sigue por nuestro carril
+  // derecho; side -1: cruza la ruta de izquierda a derecha.
+  function spawnSideCar(m, side) {
+    m.sideCars++;
+    const P = World3D.ROAD_PROFILES[m.profile];
+    const car = World3D.makeCar(pick(World3D.CAR_COLORS));
+    // Mientras gira o cruza, el auto va de costado: su caja es al revés (hw0/hl0 = la normal).
+    const u = { fromSide: true, lane: RIGHT, speed: 0, hw0: car.userData.hw, hl0: car.userData.hl, hw: car.userData.hl, hl: car.userData.hw };
+    if (side > 0) {
+      const r = P.ROAD.r + 3.5 - LANE_X[RIGHT];
+      car.position.x = P.ROAD.r + 26;
+      car.rotation.y = Math.PI / 2;
+      u.turn = { phase: 0, r, p0: m.pos - 2, x0: LANE_X[RIGHT] + r, v: 7 };
+      addWorld(car, m.pos - 2, u);
+    } else {
+      car.position.x = P.ROAD.l - 26;
+      car.rotation.y = -Math.PI / 2;
+      u.cross = { v: 8.5, xEnd: P.ROAD.r + 30 };
+      addWorld(car, m.pos + 2, u);
+    }
+    S.cars.push(car);
+  }
+
+  // Tránsito: los autos que salen de las calles, los que van adelante frenan en el semáforo en rojo y
+  // detrás del de adelante, y en Pan de Azúcar se acomodan al pasar de dos carriles a uno.
+  function updateTraffic(dt) {
+    const reds = crossings().filter((m) => m.light !== 'green').map((m) => m.pos - STOP_BACK);
+    for (const car of S.cars) {
+      const u = car.userData;
+      if (u.dead || u.hit) continue;
+      if (u.turn) {
+        const tr = u.turn;
+        if (tr.phase === 0) {            // por la calle hacia la ruta
+          car.position.x -= tr.v * dt;
+          if (car.position.x <= tr.x0) { car.position.x = tr.x0; tr.phase = 1; tr.a = 0; }
+        } else {                         // cuarto de vuelta hasta el carril derecho
+          tr.a = Math.min(Math.PI / 2, tr.a + tr.v * dt / tr.r);
+          car.position.x = LANE_X[RIGHT] + tr.r * (1 - Math.sin(tr.a));
+          u.pos = tr.p0 + tr.r * (1 - Math.cos(tr.a));
+          car.rotation.y = Math.PI / 2 - tr.a;
+          if (tr.a >= Math.PI / 2) {
+            delete u.turn;
+            u.hw = u.hw0; u.hl = u.hl0;
+            u.speed = 4; u.cruise = 15;
+          }
+        }
+        continue;
+      }
+      if (u.cross) {
+        car.position.x += u.cross.v * dt;
+        if (car.position.x > u.cross.xEnd) removeWorld(car);
+        continue;
+      }
+      if (u.oncoming) {
+        // Los de frente que llegan a la Interbalnearia siguen por los carriles de enfrente (al otro lado
+        // de la doble amarilla) y ya no se pueden chocar.
+        if (profileAt(u.pos) === 'ib' && !u.ibLane) { u.ibLane = true; u.passed = true; }
+        if (u.ibLane) car.position.x += (World3D.ROAD_PROFILES.ib.ONCOMING_LANES[0] - car.position.x) * Math.min(1, dt * 1.5);
+        continue;
+      }
+      // Fin de la Interbalnearia: el carril izquierdo se termina y los autos pasan al derecho.
+      const ch = PROFILE_CHANGES.find((c) => c.pos - u.pos > 0 && c.pos - u.pos < 160);
+      if (ch && ch.ahead === 'r9' && u.lane !== RIGHT) {
+        u.lane = RIGHT;
+        u.cruise = R9_SPEED.car;
+      }
+      if (Math.abs(car.position.x - LANE_X[u.lane]) > 0.01) {
+        car.position.x += Math.sign(LANE_X[u.lane] - car.position.x) * Math.min(Math.abs(LANE_X[u.lane] - car.position.x), 2 * dt);
+      }
+      // Velocidad: la de crucero, salvo que haya que frenar (semáforo en rojo o alguien adelante).
+      if (u.cruise === undefined) u.cruise = u.speed;
+      let limit = Infinity;
+      for (const r of reds) if (r > u.pos + u.hl - 1) limit = Math.min(limit, r - u.hl - 1);
+      for (const o of S.cars) {
+        const v = o.userData;
+        if (o === car || v.oncoming || v.dead || v.turn || v.cross) continue;
+        if (v.lane === u.lane && v.pos > u.pos) limit = Math.min(limit, v.pos - v.hl - u.hl - 3);
+      }
+      const gap = limit - u.pos;
+      const want = gap === Infinity ? u.cruise : Math.max(0, Math.min(u.cruise, (gap - 2) * 0.9));
+      u.speed += Math.max(-9 * dt, Math.min(3 * dt, want - u.speed));
+      if (u.speed < 0.05 && want === 0) u.speed = 0;
+    }
+  }
+
+  // Pasar la línea con el semáforo en rojo resta confort; frenar y esperar el verde suma.
+  function checkCrossings() {
+    for (const m of crossings()) {
+      if (m.judged) continue;
+      const front = S.dist + bus.userData.len / 2;
+      const line = m.pos - STOP_BACK;
+      if (front > line + 1.5) {
+        m.judged = true;
+        if (m.light === 'red') {
+          S.confort = Math.max(0, S.confort - 15);
+          S.score = Math.max(0, S.score - 50);
+          Sfx.miss();
+          flash();
+          popup('¡Pasaste en rojo!  -15% confort', '#ff6b5e');
+          if (S.confort <= 0) finish(false);
+        } else if (m.stopped > RED_STOPPED) {
+          S.score += 40;
+          Sfx.pickup();
+          popup('Esperaste el verde  +40', '#9be37a');
+        }
+      }
+    }
   }
 
   function busHits(o, hw, hl) {
@@ -761,7 +1022,7 @@
       if (car.position.z > 10 && !u.passed) {
         u.passed = true;
         // Ruta 9: pasar a uno lento sin chocarlo suma puntos.
-        if (twoWay() && !u.oncoming && !u.hit) {
+        if (twoWay() && !u.oncoming && !u.hit && !u.fromSide) {
           S.score += 20;
           popup('Sobrepaso +20', '#9be37a');
         }
@@ -869,6 +1130,7 @@
   }
 
   function finish(arrived) {
+    if (mode !== 'play') return;          // una sola vez por viaje (varias penalidades en el mismo cuadro)
     mode = 'ending';
     touchBrake = false;
     $('banner').classList.add('hidden');
@@ -938,6 +1200,7 @@
   // sin esto, la primera parada o el primer camión producen un tirón mientras se compilan.
   function prewarm() {
     const warm = new THREE.Group();
+    if (Models3D.hasLetters()) warm.add(Models3D.letters('ABCDEFGHIJKLMNOPQRSTUVWXYZ'));
     const items = [
       World3D.makeCar(0xb3121b, 'sedan'), World3D.makeCar(0x1e5aa8, 'hatch'), World3D.makeCar(0xf2f2f2, 'suv'),
       World3D.makeTruck(), World3D.makeMoto(), World3D.makeStopZone(), World3D.makeShelter('km 0'),
@@ -999,12 +1262,22 @@
     const peaje = S.marks.find((m) => m.type === 'peaje' && !m.checked);
     const peajeFirst = peaje && (!next || peaje.pos < next.pos);
     // Metros reales hasta un lugar, redondeados a 10 m (los km del tramo están estirados a TRIP_M).
-    const realM = (d) => Math.max(0, Math.round((d / mPerKm) * 100) * 10);
+    const realM = (d) => Math.max(0, Math.round((d / segAtPos(S.dist).mPerKm) * 100) * 10);
+    // Semáforo adelante (el más cercano que todavía no pasamos).
+    const light = S.marks.find((m) => m.type === 'semaforo' && m.obj && !m.judged && m.pos - S.dist < 220);
+    // Fin de la Interbalnearia.
+    const merge = PROFILE_CHANGES.find((c) => c.ahead === 'r9' && c.pos - S.dist < 500 && c.pos - S.dist > -40);
     // Ruta 9: si estás en el carril de enfrente y se acerca alguien, es lo primero que se avisa.
     const headOn = twoWay() && S.busX < 0.6 &&
       S.cars.some((c) => c.userData.oncoming && !c.userData.hit && c.position.z < 0 && c.position.z > -200);
     if (headOn && mode === 'play') {
       msg = '¡VIENE UNO DE FRENTE!  Volvé a tu carril ▶';
+    } else if (light && light.light !== 'green' && mode === 'play') {
+      const d = light.pos - 6 - S.dist - bus.userData.len / 2;
+      msg = light.light === 'yellow' ? '¡Amarillo! Frená antes de la línea'
+        : S.speed < 1 ? 'Semáforo en rojo · esperá el verde' : `¡SEMÁFORO EN ROJO!  Frená (${Math.max(0, Math.round(d))} m)`;
+    } else if (merge && S.busX < 0.6 && mode === 'play') {
+      msg = 'Termina la Interbalnearia: pasá al carril derecho ▶';
     } else if (peajeFirst && mode === 'play') {
       const d = peaje.pos - S.dist;
       const max = ROUTE3D_COMMON.peajeMaxKmh;
@@ -1070,7 +1343,10 @@
     list.forEach((r, i) => {
       const tr = el.insertRow();
       if (i === highlight) tr.className = 'me';
-      tr.insertCell().textContent = `${i + 1}. ${r.name}`;
+      const c1 = tr.insertCell();
+      c1.textContent = `${i + 1}. ${r.name} `;
+      const co = COMPANIES.find((c) => c.id === r.company);
+      if (co) { const sp = document.createElement('span'); sp.className = 'co'; sp.textContent = co.name; c1.appendChild(sp); }
       tr.insertCell().textContent = r.score;
     });
   }
@@ -1088,56 +1364,42 @@
     $('toast').style.opacity = 0;
   }
 
-  // Selector de tramo en el título: un botón por tramo de route3d.js.
-  const TIPS = {
-    ib: 'Pasá los peajes a 40 km/h o menos, por tu carril.',
-    r9: 'Ruta 9 tiene un carril por mano: para pasar a un camión salí al carril de enfrente cuando no venga nadie.'
-  };
+  const TIPS = [
+    'Pasá los peajes a 40 km/h o menos, por tu carril.',
+    'En los semáforos de las salidas frená antes de la línea y esperá el verde.',
+    'Ruta 9 tiene un carril por mano: para pasar a un camión salí al carril de enfrente cuando no venga nadie.'
+  ];
+  let tipIdx = Math.floor(Math.random() * TIPS.length);
   function renderTitle() {
-    $('titleTip').textContent = TIPS[R.profile] || '';
+    tipIdx = (tipIdx + 1) % TIPS.length;
+    $('titleTip').textContent = TIPS[tipIdx];
     // Textos según cómo se juega: teclado, botones en pantalla o celular como volante.
     $('titleHelp').innerHTML = !touchUI ? '← → tocá para cambiar de carril, mantené para moverte de a poco<br>↓ / ESPACIO frenar'
       : control === 'tilt' ? 'Incliná el celular como un volante para cambiar de carril<br>FRENO para frenar'
       : '◀ ▶ tocá para cambiar de carril, mantené para moverte de a poco<br>FRENO para frenar';
-    $('titlePrompt').textContent = touchUI ? 'Tocá un tramo para salir' : 'Tocá un tramo, o elegilo con ← → y apretá ESPACIO';
-    $('titleGarage').textContent = touchUI ? 'VER ÓMNIBUS' : 'VER ÓMNIBUS (G)';
+    $('titlePrompt').textContent = touchUI ? 'Tocá el viaje para salir' : 'Apretá ESPACIO para salir';
     $('titleControl').textContent = `CONTROLES: ${control === 'tilt' ? 'INCLINACIÓN' : 'BOTONES'}`;
+    $('titleSkin').textContent = skinButtonText();
+    show('titleSkin', company().skins.length > 1);
+    $('titlePlayer').textContent = player.chosen ? `${player.name} · ${company().name.toUpperCase()} (CAMBIAR)` : 'ELEGÍ NOMBRE Y EMPRESA';
     show('titleControl', touchUI);
     const box = $('tramos');
     box.innerHTML = '';
-    ROUTES3D.forEach((r) => {
-      const b = document.createElement('button');
-      b.className = 'tramo' + (r.id === R.id ? ' on' : '');
-      b.innerHTML = `<b>${r.title}</b><span>${r.origin} → ${r.dest}</span>`;
-      // Tocar un tramo sale directo por ese tramo (modo kiosco: un solo toque).
-      b.addEventListener('pointerdown', (e) => {
-        e.stopPropagation();
-        if (mode !== 'title') return;
-        if (r.id !== R.id) chooseRoute(r.id);
-        startGame();
-      });
-      box.appendChild(b);
+    // Un solo viaje: tocarlo sale directo (modo kiosco: un solo toque).
+    const b = document.createElement('button');
+    b.className = 'tramo on';
+    b.innerHTML = '<b>Línea 152I · viaje completo</b><span>Tres Cruces → Chuy · Interbalnearia y Ruta 9</span>';
+    b.addEventListener('pointerdown', (e) => {
+      e.stopPropagation();
+      if (mode === 'title') startGame();
     });
+    box.appendChild(b);
     rankTable($('titleRank'), -1, 5);
-  }
-
-  function chooseRoute(id) {
-    if (id === R.id) return;
-    setRoute(id);
-    clearWorld();
-    S = newRun(true);
-    resetDecos();
-    renderTitle();
-  }
-
-  function cycleRoute(d) {
-    const i = ROUTES3D.indexOf(R);
-    Sfx.click();
-    chooseRoute(ROUTES3D[(i + d + ROUTES3D.length) % ROUTES3D.length].id);
   }
 
   function startGame() {
     // En el celular, la primera vez se elige cómo manejar y después se sale.
+    if (!player.chosen) { openPlayer(startGame); return; }
     if (touchUI && !controlChosen) { openControls(startGame); return; }
     Sfx.unlock();
     Sfx.click();
@@ -1171,7 +1433,8 @@
     const confort = Math.round(S.confort);
     $('rTitle').textContent = arrived ? '¡LLEGASTE!' : 'VIAJE TERMINADO';
     $('rTitle').style.color = arrived ? '#f2b705' : '#ff6b5e';
-    const kmDone = Math.min(R.to, kmAt(S.dist)) - R.from;
+    // Km recorridos: suma de lo hecho en cada segmento (sin el salto de km de Pan de Azúcar).
+    const kmDone = SEGS.reduce((a, g) => a + Math.max(0, Math.min(g.to, kmAt(Math.min(S.dist, g.p1 - 0.01))) - g.from) * (S.dist > g.p0 ? 1 : 0), 0);
     $('rStats').textContent = `${R.origin} → ${R.dest} · ${kmDone.toFixed(1)} km en ${mins}:${secs} · Paradas ${stopsDone}/${S.stops.length} · Choques ${S.crashes}`;
     const rows = [
       [`Pasajeros (${S.passengers} × 100)`, S.passengers * 100],
@@ -1201,29 +1464,16 @@
       show('rPrompt', true);
       setTimeout(() => { canLeave = true; }, 700);
       clearTimeout(showResult.timer);
-      showResult.timer = setTimeout(() => { if (mode === 'result') goTitle(); }, 25000);
+      showResult.timer = setTimeout(() => { if (mode === 'result') leaveResult(); }, 25000);
     };
-    if (Ranking.qualifies(total)) askName((name) => done(Ranking.add(name, total)));
+    if (Ranking.qualifies(total)) done(Ranking.add(player.name || 'JUGADOR', total, player.company));
     else done(-1);
   }
 
-  function askName(onDone) {
-    const box = $('nameBox');
-    const input = $('nameInput');
-    input.value = '';
-    box.classList.remove('hidden');
-    setTimeout(() => input.focus(), 50);
-    const submit = () => {
-      const name = (input.value.trim() || 'ANÓNIMO').toUpperCase().slice(0, 12);
-      $('nameOk').onclick = null;
-      input.onkeydown = null;
-      box.classList.add('hidden');
-      input.blur();
-      Sfx.click();
-      onDone(name);
-    };
-    $('nameOk').onclick = submit;
-    input.onkeydown = (e) => { if (e.key === 'Enter') submit(); };
+  // Después de cada viaje vuelve al título y pide el próximo jugador (el anterior queda cargado).
+  function leaveResult() {
+    goTitle();
+    openPlayer(null);
   }
 
   function togglePause() {
@@ -1265,83 +1515,101 @@
     if (steer.held > TAP_TIME) S.targetX = clampX(S.busX + steer.dir * 1.2);
   }
 
-  // ---------- Garaje (previsualizador de skins) ----------
+  // ---------- Jugador: nombre y empresa ----------
+  // Al entrar, el jugador pone su nombre (va al ranking) y elige empresa. La empresa define el ómnibus:
+  // si tiene más de una skin, el botón ÓMNIBUS del título alterna entre las suyas.
   const SKINS = World3D.SKINS;
-  const SKIN_KEY = 'cot-ruta-3d-skin';
-  const garage = { idx: 0, ang: 0.9, tilt: 0, drag: null };
-  let chosenSkin = SKINS[0].id;
+  const COMPANIES = [
+    { id: 'cot', name: 'COT', color: '#f26b1d', skins: ['cot', 'cot925'] },
+    { id: 'rutas_del_sol', name: 'Rutas del Sol', color: '#1f6fd1', skins: ['rutas_del_sol'] },
+    { id: 'cynsa', name: 'CYNSA', color: '#e0301e', skins: ['cynsa'] }
+  ].map((c) => ({ ...c, skins: c.skins.filter((id) => SKINS.some((s) => s.id === id && s.available)) }))
+    .filter((c) => c.skins.length);
+  const PLAYER_KEY = 'cot-ruta-3d-player';
+  const player = { name: '', company: COMPANIES[0].id, skin: COMPANIES[0].skins[0], chosen: false };
   try {
-    const saved = localStorage.getItem(SKIN_KEY);
-    if (SKINS.some((s) => s.id === saved && s.available)) chosenSkin = saved;
-  } catch (e) { /* sin almacenamiento: se usa la skin por defecto */ }
+    const saved = JSON.parse(localStorage.getItem(PLAYER_KEY) || 'null');
+    if (saved) {
+      player.name = String(saved.name || '').slice(0, 12);
+      if (COMPANIES.some((c) => c.id === saved.company)) player.company = saved.company;
+      const co = COMPANIES.find((c) => c.id === player.company);
+      player.skin = co.skins.includes(saved.skin) ? saved.skin : co.skins[0];
+    }
+  } catch (e) { /* sin almacenamiento: se arranca de cero */ }
+  const company = () => COMPANIES.find((c) => c.id === player.company) || COMPANIES[0];
+  const savePlayer = () => {
+    try { localStorage.setItem(PLAYER_KEY, JSON.stringify({ name: player.name, company: player.company, skin: player.skin })); } catch (e) { /* no se recuerda */ }
+  };
+  let afterPlayer = null;
 
-  function openGarage() {
-    if (mode !== 'title') return;
+  function renderCompanies() {
+    const box = $('companies');
+    box.innerHTML = '';
+    COMPANIES.forEach((c) => {
+      const btn = document.createElement('button');
+      btn.className = 'choice' + (c.id === player.company ? ' on' : '');
+      btn.innerHTML = `<b>${c.name}</b><i style="background:${c.color}"></i>`;
+      btn.addEventListener('click', () => pickCompany(c.id));
+      box.appendChild(btn);
+    });
+  }
+  function pickCompany(id) {
+    if (id !== player.company) {
+      player.company = id;
+      player.skin = company().skins[0];
+    }
+    if (bus) bus.userData.setSkin(player.skin);
     Sfx.unlock();
     Sfx.click();
-    mode = 'garage';
-    clearWorld();
-    S.cars = [];
-    S.pickups = [];
-    S.lane = RIGHT;
-    S.targetX = LANE_X[RIGHT];
-    garage.idx = Math.max(0, SKINS.findIndex((s) => s.id === chosenSkin));
-    garage.ang = 0.9;
-    garage.tilt = 0;
-    show('titleScreen', false);
-    show('garageScreen', true);
-    renderGarage();
+    renderCompanies();
   }
-
-  function renderGarage() {
-    const s = SKINS[garage.idx];
-    bus.userData.setSkin(s.id);
-    $('gName').textContent = s.name;
-    $('gNote').textContent = !s.available ? 'Disponible pronto' : s.id === chosenSkin ? 'Elegido' : '';
-    $('gChoose').disabled = !s.available || s.id === chosenSkin;
-    $('gCount').textContent = `${garage.idx + 1} / ${SKINS.length}`;
+  function openPlayer(next) {
+    afterPlayer = next;
+    $('playerName').value = player.name;
+    $('playerName').classList.remove('bad');
+    renderCompanies();
+    show('playerBox', true);
+    if (!touchUI) setTimeout(() => { $('playerName').focus(); $('playerName').select(); }, 50);
   }
-
-  function cycleSkin(d) {
-    garage.idx = (garage.idx + d + SKINS.length) % SKINS.length;
+  function confirmPlayer() {
+    const name = $('playerName').value.trim().toUpperCase().slice(0, 12);
+    if (!name) { $('playerName').classList.add('bad'); $('playerName').focus(); Sfx.miss(); return; }
+    player.name = name;
+    player.chosen = true;
+    savePlayer();
+    $('playerName').blur();
+    Sfx.unlock();
     Sfx.click();
-    renderGarage();
+    show('playerBox', false);
+    if (bus) bus.userData.setSkin(player.skin);
+    renderTitle();
+    const next = afterPlayer;
+    afterPlayer = null;
+    if (next) next();
   }
+  $('playerOk').addEventListener('click', confirmPlayer);
+  // El Enter del nombre solo confirma: no tiene que llegar al juego (si no, arrancaría el viaje).
+  $('playerName').addEventListener('keydown', (e) => { e.stopPropagation(); if (e.key === 'Enter') confirmPlayer(); });
+  $('playerName').addEventListener('input', () => $('playerName').classList.remove('bad'));
+  $('playerBox').addEventListener('pointerdown', (e) => e.stopPropagation());
+  $('titlePlayer').addEventListener('pointerdown', (e) => { e.stopPropagation(); if (mode === 'title') openPlayer(null); });
 
-  function chooseSkin() {
-    const s = SKINS[garage.idx];
-    if (!s.available) return;
-    chosenSkin = s.id;
-    try { localStorage.setItem(SKIN_KEY, chosenSkin); } catch (e) { /* no se guarda entre sesiones */ }
-    Sfx.board();
-    renderGarage();
+  // Botón del título: solo si la empresa tiene más de un ómnibus (COT: Primera Clase y 925).
+  function skinButtonText() {
+    const s = SKINS.find((k) => k.id === player.skin) || SKINS[0];
+    return `ÓMNIBUS: ${s.name.toUpperCase()}${touchUI ? '' : ' (O)'}`;
   }
-
-  function closeGarage() {
-    if (mode !== 'garage') return;
+  function cycleSkin() {
+    const list = company().skins;
+    if (list.length < 2) return;
+    player.skin = list[(list.indexOf(player.skin) + 1) % list.length];
+    savePlayer();
+    if (bus) bus.userData.setSkin(player.skin);
+    Sfx.unlock();
     Sfx.click();
-    bus.userData.setSkin(chosenSkin);
-    show('garageScreen', false);
-    goTitle();
+    $('titleSkin').textContent = skinButtonText();
   }
-
-  // Arrastrar (mouse o dedo) para girar la cámara alrededor del ómnibus.
-  const gView = $('garageScreen');
-  gView.addEventListener('pointerdown', (e) => {
-    if (e.target.closest('button')) return;
-    garage.drag = { x: e.clientX, y: e.clientY, ang: garage.ang, tilt: garage.tilt };
-  });
-  window.addEventListener('pointermove', (e) => {
-    if (!garage.drag) return;
-    garage.ang = garage.drag.ang - (e.clientX - garage.drag.x) * 0.008;
-    garage.tilt = Math.max(-1.5, Math.min(8, garage.drag.tilt + (e.clientY - garage.drag.y) * 0.02));
-  });
-  window.addEventListener('pointerup', () => { garage.drag = null; });
-  $('titleGarage').addEventListener('pointerdown', (e) => { e.stopPropagation(); openGarage(); });
-  $('gPrev').addEventListener('click', () => cycleSkin(-1));
-  $('gNext').addEventListener('click', () => cycleSkin(1));
-  $('gChoose').addEventListener('click', chooseSkin);
-  $('gBack').addEventListener('click', closeGarage);
+  $('titleSkin').addEventListener('pointerdown', (e) => { e.stopPropagation(); if (mode === 'title') cycleSkin(); });
 
   // ---------- Controles en el celular: botones o inclinación ----------
   // Al entrar desde un celular se elige cómo manejar. Con "inclinación" el celular es el volante:
@@ -1459,7 +1727,8 @@
   document.addEventListener('visibilitychange', () => { if (document.hidden && mode === 'play' && !paused) togglePause(); });
 
   // ---------- Entrada ----------
-  const typing = () => document.activeElement === $('nameInput');
+  // Mientras se escribe el nombre (o está abierta la pantalla del jugador) el juego no toma las teclas.
+  const typing = () => (document.activeElement && document.activeElement.tagName === 'INPUT') || !$('playerBox').classList.contains('hidden');
 
   // Los botones en pantalla solo aparecen en dispositivos táctiles.
   let touchUI = window.matchMedia('(pointer: coarse)').matches;
@@ -1481,18 +1750,9 @@
     if (e.code === 'KeyH') Sfx.horn();
     if (e.code === 'KeyP' || e.code === 'Escape') togglePause();
     const confirm = e.code === 'Space' || e.code === 'Enter';
-    if (mode === 'garage') {
-      if (e.code === 'ArrowLeft' || e.code === 'KeyA') cycleSkin(-1);
-      if (e.code === 'ArrowRight' || e.code === 'KeyD') cycleSkin(1);
-      if (confirm) chooseSkin();
-      if (e.code === 'Escape' || e.code === 'Backspace' || e.code === 'KeyG') closeGarage();
-      return;
-    }
-    if (e.code === 'KeyG' && mode === 'title') openGarage();
-    if (mode === 'title' && (e.code === 'ArrowLeft' || e.code === 'KeyA')) cycleRoute(-1);
-    if (mode === 'title' && (e.code === 'ArrowRight' || e.code === 'KeyD')) cycleRoute(1);
+    if (mode === 'title' && e.code === 'KeyO') cycleSkin();
     if (confirm && mode === 'title') startGame();
-    else if (confirm && mode === 'result' && canLeave) goTitle();
+    else if (confirm && mode === 'result' && canLeave) leaveResult();
     // Para el organizador del evento: Shift + B borra el ranking.
     if (e.code === 'KeyB' && e.shiftKey && mode === 'title' && window.confirm('¿Borrar todo el ranking?')) {
       Ranking.clear();
@@ -1507,7 +1767,7 @@
   window.addEventListener('blur', () => { keys.clear(); touchBrake = false; steerRelease(steer.dir); });
 
   $('titleScreen').addEventListener('pointerdown', () => { if (mode === 'title') startGame(); });
-  $('resultScreen').addEventListener('pointerdown', () => { if (mode === 'result' && canLeave) goTitle(); });
+  $('resultScreen').addEventListener('pointerdown', () => { if (mode === 'result' && canLeave) leaveResult(); });
   $('pauseScreen').addEventListener('pointerdown', togglePause);
 
   const hold = (el, down, up) => {
@@ -1519,21 +1779,31 @@
   hold($('bBrake'), () => { touchBrake = true; }, () => { touchBrake = false; });
 
   // ---------- Arranque ----------
+  const modelsReady = Models3D.load();
   bus = World3D.loadBus((root) => {
     scene.add(root);
     syncBlobs(root);
-    root.userData.setSkin(chosenSkin);
+    root.userData.setSkin(player.skin);
     $('loading').textContent = 'Preparando gráficos…';
+    // Con los modelos del pack listos, la decoración se rearma con ellos.
+    modelsReady.then(() => {
+      Object.keys(decoSets).forEach((k) => delete decoSets[k]);
+      Object.keys(decoPools).forEach((k) => delete decoPools[k]);
+      buildDecos();
+      resetDecos();
+      applyGfx(gfx.level);
+    })
     // Se espera un cuadro para que se vea el mensaje antes de compilar.
-    requestAnimationFrame(() => prewarm().then(() => {
+    .then(() => new Promise((res) => requestAnimationFrame(res))).then(() => prewarm().then(() => {
       $('loading').remove();
       goTitle();
-      if (touchUI) openControls(null);      // en el celular, lo primero es elegir cómo manejar
+      // Lo primero: nombre y empresa; en el celular, después, cómo manejar.
+      openPlayer(touchUI ? () => openControls(null) : null);
       renderer.setAnimationLoop(frame);
     }));
   });
   createDecos();
-  setRoute(R.id);
+  setupRoute();
   S = newRun(true);
   resetDecos();
   applyGfx(gfx.level);
@@ -1541,7 +1811,7 @@
   // Para depurar desde la consola.
   window.game3d = {
     get state() { return S; }, get mode() { return mode; }, get gfx() { return { ...gfx, name: GFX_LEVELS[gfx.level].name }; },
-    scene, camera, renderer, TRIP_M, applyGfx, get route() { return R; }, setRoute: chooseRoute,
+    scene, camera, renderer, TRIP_M, applyGfx, get route() { return R; }, SEGS, profileAt, step: (dt) => update(dt),
     kmAt, posAt, resetDecos, headingAt, heightAt, get tilt() { return { ...tilt, control }; }
   };
 })();

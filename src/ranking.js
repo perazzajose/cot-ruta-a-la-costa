@@ -26,8 +26,10 @@ const Ranking = {
   },
 
   // Devuelve la posición (0 = primero) en la que quedó la entrada.
-  add(name, score) {
+  // company es opcional (el 3D guarda la empresa del jugador).
+  add(name, score, company) {
     const entry = { name, score, date: Date.now() };
+    if (company) entry.company = company;
     const list = this.load();
     list.push(entry);
     list.sort((a, b) => b.score - a.score);

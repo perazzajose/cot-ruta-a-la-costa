@@ -39,18 +39,56 @@ Archivos de la versión 3D: `src3d/` (lógica, mundo y librea), `lib/three.bundl
 
 En el camino aparecen los peajes de **Pando** (km 33) y **Solís** (km 81), los carteles azules de arroyo (Aº Pando, Aº Solís Chico, Aº Solís Grande) y los carteles azules en ménsula de Ciudad de la Costa, Atlántida, Piriápolis y Pan de Azúcar. **En el peaje** hay que pasar a 40 km/h o menos y por un carril: si vas más rápido perdés confort, si pasás por el medio chocás la isleta, y si lo hacés bien sumás 50 puntos.
 
-**Tramos:** el viaje Montevideo → Chuy está dividido en tres tramos, uno después del otro. En la pantalla de título se elige el tramo. Se toca uno y sale directo, o se elige con ← → y se arranca con ESPACIO. El tramo elegido queda guardado y cada tramo tiene su propio ranking. Todos duran lo mismo (unos 2-3 minutos), pero los carteles y el HUD muestran los km reales de la ruta.
+**Viaje completo:** el viaje es uno solo, de Tres Cruces a la Terminal Chuy, y dura unos 9 minutos. En el título se toca el viaje (o ESPACIO) y sale directo. Hay un único ranking. Por dentro está armado con tres partes seguidas que duran lo mismo; los carteles y el HUD muestran los km reales de la ruta (en Pan de Azúcar saltan del 97 al 107, porque Ruta 9 cuenta desde Montevideo por Ruta 8). Al terminar la Interbalnearia la ruta se angosta a la vista y aparece el aviso "Termina la Interbalnearia: pasá al carril derecho"; los autos del carril izquierdo se pasan solos al derecho.
 - **Interbalnearia:** Tres Cruces → Pan de Azúcar (km 0–97), como se describe arriba.
-- **Ruta 9 · Tramo 1:** Pan de Azúcar → Terminal Rocha (km 107–207,5; Ruta 9 cuenta los km desde Montevideo por Ruta 8, por eso arranca en el 107). Pasa por las sierras al fondo, San Carlos y el peaje **Garzón**, y tiene carteles de Aº San Carlos, Aº Garzón, Aº Sarandí y Aº Rocha.
-- **Ruta 9 · Tramo 2:** Terminal Rocha → Terminal Chuy (km 207,5–337,6). Pasa por Aº Chafalote, los **palmares de butiá** de Castillos, los **bañados** (pajonales y charcos), Punta del Diablo, la **Fortaleza de Santa Teresa** (a la derecha, con la bandera), la **Laguna Negra** (a la izquierda) y la llegada al Chuy.
+- **Ruta 9 hasta Rocha:** Pan de Azúcar → Terminal Rocha (km 107–207,5; Ruta 9 cuenta los km desde Montevideo por Ruta 8, por eso arranca en el 107). Pasa por las sierras al fondo, San Carlos y el peaje **Garzón**, y tiene carteles de Aº San Carlos, Aº Garzón, Aº Sarandí y Aº Rocha.
+- **Ruta 9 hasta el Chuy:** Terminal Rocha → Terminal Chuy (km 207,5–337,6). Pasa por Aº Chafalote, los **palmares de butiá** de Castillos, los **bañados** (pajonales y charcos), Punta del Diablo, la **Fortaleza de Santa Teresa** (a la derecha, con la bandera), la **Laguna Negra** (a la izquierda) y la llegada al Chuy.
 
 **Paradas reales:** todas son paradas reales de la línea 152I, sacadas del mapa de `data/ruta-mvd-chuy.js` y pasadas a km de ruta. Los refugios muestran el nombre: Atlántida, San Luis, Las Flores, San Carlos, Rocha, Emp. Valizas, 19 de Abril, Castillos, La Esmeralda, Punta del Diablo y La Coronilla (las demás, el km).
 
 **Ruta 9 se maneja distinto:** tiene un solo carril por mano, con línea amarilla discontinua al centro. Por tu carril van camiones, autos y motos lentos. Para pasarlos tenés que salir al carril de enfrente, por donde vienen autos y camiones que también se pueden chocar. Si estás en ese carril y se acerca alguien, aparece el aviso "¡VIENE UNO DE FRENTE!". Cada sobrepaso limpio suma 20 puntos.
 
-**Armar otros tramos:** todo lo que aparece en cada tramo está en `src3d/route3d.js` (`ROUTES3D`). Ahí van los km de inicio y fin, el origen y el destino, el perfil de la ruta (`ib` o `r9`) y las zonas de paisaje (con qué tanto aparece cada árbol, casa, vaca, butiá, pajonal o charco; un peso de más de 4 los hace todavía más densos). También van los lugares por km (localidades, arroyos, peajes, cerros, mar o laguna, fortaleza) y las paradas. Los km son aproximados y se ajustan ahí, sin tocar el código del juego. Para sumar un tramo nuevo alcanza con agregar otra entrada.
+**Semáforos en las salidas:** en las entradas a las ciudades (Lagomar, Solymar, Atlántida, Pan de Azúcar, San Carlos, Rocha, Castillos y Chuy) hay cruces con calles a los dos lados y un semáforo en ménsula. Casi siempre, al acercarte, se pone en amarillo y después en rojo: hay que frenar antes de la línea blanca y esperar el verde. Mientras está en rojo salen autos de las calles: uno dobla y sigue delante tuyo por el carril derecho, y otro cruza la ruta. Los autos que van adelante también frenan en el rojo y hacen fila. Pasar en rojo resta 15 % de confort y 50 puntos; esperar el verde suma 40. Los cruces son landmarks `type: 'semaforo'` (lista `SEMAFOROS` en `ROUTE_FULL`) y el modelo es `World3D.makeCrossing`.
 
-**Garaje y skins:** en la pantalla de título, el botón **VER ÓMNIBUS** (o la tecla **G**) abre un garaje donde se ve el ómnibus girando. Se puede arrastrar para rotarlo y cambiar de skin con ◀ ▶. La skin elegida queda guardada en esa PC. Hoy hay una sola disponible (COT Primera Clase) y dos lugares marcados como "Próximamente". Para habilitar una nueva, se completa su entrada en `SKINS` (`src3d/world3d.js`) con `available: true`, sus colores y su logo.
+**Más bosque:** fuera de las ciudades (zonas sin alumbrado) se suma un bosque de unos 100 árboles del pack, tupido cerca del alambrado y más ralo hacia el fondo. Son `InstancedMesh` sin sombra; con el paso de calidad "distancia corta" se ve la mitad. Cada zona puede bajar la densidad con `forest` (de 0 a 1): los palmares, los bañados y la Laguna Negra lo tienen bajo para que sigan abiertos.
+
+**Armar el recorrido:** todo lo que aparece en cada parte está en `src3d/route3d.js` (`ROUTES3D`); `ROUTE_FULL` las une en el viaje que se juega. Ahí van los km de inicio y fin, el origen y el destino, el perfil de la ruta (`ib` o `r9`) y las zonas de paisaje (con qué tanto aparece cada árbol, casa, vaca, butiá, pajonal o charco; un peso de más de 4 los hace todavía más densos). También van los lugares por km (localidades, arroyos, peajes, cerros, mar o laguna, fortaleza) y las paradas. Los km son aproximados y se ajustan ahí, sin tocar el código del juego. Una entrada nueva en `ROUTES3D` se suma sola al viaje (alarga el viaje 5,2 km de juego).
+
+**Jugador y empresa:** al entrar, el jugador pone su nombre y elige empresa: **COT**, **Rutas del Sol** o **CYNSA**. La empresa define el ómnibus (COT tiene dos, Primera Clase y 925, que se alternan con el botón **ÓMNIBUS** del título o la tecla **O**). El nombre va directo al ranking, que muestra la empresa de cada uno. Después de cada viaje la pantalla vuelve a aparecer con lo anterior cargado, para el próximo jugador. Las empresas y sus skins están en `COMPANIES` (`src3d/game3d.js`).
+
+**Skins:**
+- **COT Primera Clase:** librea pintada por código según las fotos del Marcopolo de COT.
+- **COT 925:** sale de una plantilla de pintura de Proton Bus Simulator (`src/cot925.zip`). Como esa plantilla se hizo para otro modelo, se **proyecta** sobre el nuestro desde cada lado (costados, techo, cola y frente), calibrada para que sus ventanas coincidan con las del modelo. Lo negro de la plantilla se dibuja como vidrio. La imagen está embebida en `src3d/skinCot925.js` y la calibración de cada panel está en `SKINS` (`src3d/world3d.js`). La plantilla la hizo un modder: si el juego se publica, conviene pedirle permiso y darle crédito.
+
+**Modelos del paisaje y del tránsito** (packs en `assets/modelos/`, preparados en `src3d/models/*.js` con `tools/preparar_modelos.mjs`, cargados por `src3d/models3d.js`):
+- **Árboles** (frondosos, eucaliptos y pinos) y **casas** del pack. Se dibujan con *instancing*: todas las copias de un modelo van en un solo dibujo, así que un monte entero cuesta casi lo mismo que un árbol. Cada modelo de casa tiene sus colores de balneario.
+- **Montes:** zonas con `monte: true` en `src3d/route3d.js` (Costa de Oro km 52–59 y 66–72, monte serrano km 112–119, Parque Santa Teresa), donde los árboles van tupidos y pegados al alambrado.
+- **Autos** del pack (sedán, hatchback, camioneta, deportivos y algún taxi), pintados de distintos colores.
+- **Carteles de ciudad con letras 3D** (`type: 'letters'` en `route3d.js`): Ciudad de la Costa, Atlántida, Piriápolis, Pan de Azúcar, San Carlos, Rocha, Castillos, Punta del Diablo, La Coronilla y Chuy. Cada letra se carga una sola vez y todos los carteles reutilizan las mismas piezas; los colores van rotando. Delante de un cartel no se pone decoración, para que se lea. Para sumar uno: `{ km, type: 'letters', text: 'Nombre' }` (las tildes se quitan solas).
+- **Créditos:** el alfabeto es "Block Alphabet" de Jose Rosero (crédito en el título). Los packs de árboles, autos y casas se bajaron de Poly Pizza: antes de publicar, confirmar en la página de cada uno la licencia y el autor.
+- Si un archivo de modelos falta, el juego usa los modelos simples de antes.
+
+**Skins de otras empresas** (en `src3d/skins/`):
+- **Rutas del Sol:** pintada con IA sobre nuestra plantilla (`assets/rutasdelsolprueba.png`); se pasaron los vidrios a negro puro.
+- **CYNSA:** pintada con IA sobre nuestra plantilla (`src3d/cynsa.png`), tomando como referencia un dibujo de Maílson Amancio Pereira (`assets/cynsaprueba.jpg`); el crédito sigue en el título. Se pasaron los vidrios a negro puro. La IA dibujó la cola a su manera (luneta blanca con el logo y luces más abajo), y se dejó así.
+- Son marcas reales: antes de mostrarlas en el evento, confirmar que COT está de acuerdo.
+
+**Hacer una skin nueva (queda tan bien como la de COT):**
+1. Abrí `assets/plantilla-omnibus/plantilla-en-blanco.png` en un programa de dibujo (Photoshop, GIMP, Krita, Photopea…). Son vistas exactas de NUESTRO ómnibus, así que todo lo que pintes calza justo:
+   - arriba, el costado izquierdo (el frente queda a la izquierda);
+   - debajo, el costado derecho, con la puerta (el frente queda a la derecha);
+   - después, el techo;
+   - abajo a la izquierda, la cola;
+   - al lado, el frente.
+   `plantilla-ejemplo-cot.png` es la misma plantilla con la librea de COT, como referencia.
+2. Pintá encima, sin mover ni estirar nada. Lo que pintes **negro puro** se dibuja como vidrio. La luneta también se puede pintar (por ejemplo, con un logo).
+3. Guardala como JPG de 2048 × 2048 (cuadrada) y convertila: `py tools/skin_a_js.py mi-skin.jpg cot_verano "COT Verano"`. El script crea `src3d/skins/cot_verano.js` y lo agrega a `index3d.html`. La skin aparece en el botón ÓMNIBUS.
+
+Si el modelo del ómnibus cambia, la plantilla se regenera abriendo `tools/generar_plantilla.html?blanco` (y `?ejemplo`) y guardando la imagen.
+
+Para sumar otra plantilla de Proton (hecha para otro modelo, calza peor): embeberla igual que `skinCot925.js` y copiar la entrada `cot925` de `SKINS`, ajustando los píxeles de cada panel.
+
+El visor del ómnibus (garaje) se sacó: de cerca y de costado se notaban los defectos del modelo, que en el juego, con la cámara atrás, no se ven.
 
 **Manejo:** el ómnibus se maneja como uno real. Acelera despacio (de 0 a 90 km/h en unos 6 segundos), necesita unos 40 m para frenar del todo y cambia de carril en unos 2 segundos (un toque cambia de carril completo; mantener apretado lo mueve de a poco y al soltar se queda donde está, aunque sea entre dos carriles), con la carrocería inclinándose en las curvas y la trompa hundiéndose al frenar. El aviso de parada aparece con tiempo de sobra para frenar.
 
