@@ -54,11 +54,13 @@ En el camino aparecen los peajes de **Pando** (km 33) y **Solís** (km 81), los 
 
 **Armar el recorrido:** todo lo que aparece en cada parte está en `src3d/route3d.js` (`ROUTES3D`); `ROUTE_FULL` las une en el viaje que se juega. Ahí van los km de inicio y fin, el origen y el destino, el perfil de la ruta (`ib` o `r9`) y las zonas de paisaje (con qué tanto aparece cada árbol, casa, vaca, butiá, pajonal o charco; un peso de más de 4 los hace todavía más densos). También van los lugares por km (localidades, arroyos, peajes, cerros, mar o laguna, fortaleza) y las paradas. Los km son aproximados y se ajustan ahí, sin tocar el código del juego. Una entrada nueva en `ROUTES3D` se suma sola al viaje (alarga el viaje 5,2 km de juego).
 
-**Jugador y empresa:** al entrar, el jugador pone su nombre y elige empresa: **COT**, **Rutas del Sol** o **CYNSA**. La empresa define el ómnibus (COT tiene dos, Primera Clase y 925, que se alternan con el botón **ÓMNIBUS** del título o la tecla **O**). El nombre va directo al ranking, que muestra la empresa de cada uno. Después de cada viaje la pantalla vuelve a aparecer con lo anterior cargado, para el próximo jugador. Las empresas y sus skins están en `COMPANIES` (`src3d/game3d.js`).
+**Jugador y empresa:** al entrar, el jugador pone su nombre y elige empresa: **COT**, **Rutas del Sol** o **CYNSA**. La empresa define el ómnibus: cada una tiene uno solo. (Si una empresa tiene más de uno en `COMPANIES`, aparece el botón **ÓMNIBUS** del título, o la tecla **O**, para alternarlos.) El nombre va directo al ranking, que muestra la empresa de cada uno. Después de cada viaje la pantalla vuelve a aparecer con lo anterior cargado, para el próximo jugador. Las empresas y sus skins están en `COMPANIES` (`src3d/game3d.js`).
 
 **Skins:**
-- **COT Primera Clase:** librea pintada por código según las fotos del Marcopolo de COT.
-- **COT 925:** sale de una plantilla de pintura de Proton Bus Simulator (`src/cot925.zip`). Como esa plantilla se hizo para otro modelo, se **proyecta** sobre el nuestro desde cada lado (costados, techo, cola y frente), calibrada para que sus ventanas coincidan con las del modelo. Lo negro de la plantilla se dibuja como vidrio. La imagen está embebida en `src3d/skinCot925.js` y la calibración de cada panel está en `SKINS` (`src3d/world3d.js`). La plantilla la hizo un modder: si el juego se publica, conviene pedirle permiso y darle crédito.
+- **COT 1° Clase** (la única de COT): pintada con IA sobre nuestra plantilla (`assets/plantilla-omnibus/cot-mejorada.jpg` → `src3d/skins/cot_mejorada.js`). Se calzaron la cola y el frente, el parabrisas quedó en negro puro y el 986 / disco 90 se corrieron para que no queden cortados en la esquina ni tapados por la rejilla del motor.
+- Ya no se usan, pero siguen en el código por si se quieren recuperar (sumándolas a `COMPANIES`):
+  - **COT Primera Clase** (`cot`): librea pintada por código según las fotos del Marcopolo de COT. Es también la de repuesto si falta una skin.
+  - **COT 925** (`cot925`; para usarla hay que volver a cargar `src3d/skinCot925.js` en `index3d.html`): sale de una plantilla de pintura de Proton Bus Simulator (`src/cot925.zip`). Como esa plantilla se hizo para otro modelo, se **proyecta** sobre el nuestro desde cada lado (costados, techo, cola y frente), calibrada para que sus ventanas coincidan con las del modelo. Lo negro de la plantilla se dibuja como vidrio. La imagen está embebida en `src3d/skinCot925.js` y la calibración de cada panel está en `SKINS` (`src3d/world3d.js`). La plantilla la hizo un modder: si el juego se publica, conviene pedirle permiso y darle crédito.
 
 **Modelos del paisaje y del tránsito** (packs en `assets/modelos/`, preparados en `src3d/models/*.js` con `tools/preparar_modelos.mjs`, cargados por `src3d/models3d.js`):
 - **Árboles** (frondosos, eucaliptos y pinos) y **casas** del pack. Se dibujan con *instancing*: todas las copias de un modelo van en un solo dibujo, así que un monte entero cuesta casi lo mismo que un árbol. Cada modelo de casa tiene sus colores de balneario.
@@ -82,7 +84,7 @@ En el camino aparecen los peajes de **Pando** (km 33) y **Solís** (km 81), los 
    - al lado, el frente.
    `plantilla-ejemplo-cot.png` es la misma plantilla con la librea de COT, como referencia.
 2. Pintá encima, sin mover ni estirar nada. Lo que pintes **negro puro** se dibuja como vidrio. La luneta también se puede pintar (por ejemplo, con un logo).
-3. Guardala como JPG de 2048 × 2048 (cuadrada) y convertila: `py tools/skin_a_js.py mi-skin.jpg cot_verano "COT Verano"`. El script crea `src3d/skins/cot_verano.js` y lo agrega a `index3d.html`. La skin aparece en el botón ÓMNIBUS.
+3. Guardala como JPG de 2048 × 2048 (cuadrada) y convertila: `py tools/skin_a_js.py mi-skin.jpg cot_verano "COT Verano"`. El script crea `src3d/skins/cot_verano.js` y lo agrega a `index3d.html`. Para que se pueda elegir, sumá su id a la empresa en `COMPANIES` (`src3d/game3d.js`); con más de una, aparece el botón ÓMNIBUS.
 
 Si el modelo del ómnibus cambia, la plantilla se regenera abriendo `tools/generar_plantilla.html?blanco` (y `?ejemplo`) y guardando la imagen.
 

@@ -1312,6 +1312,12 @@ float headMask = 0.0;
     // Alero sobre la luneta (unión del techo con la cola): con el color del techo. Si no, toma el borde
     // de la vista lateral de la plantilla (vidrio negro) estirado en la esquina.
     if (u > 0.93 && h > 3.45) { col = skinPx(mix(uTRoof.x, uTRoof.y, 0.9), mix(uTRoof.z, uTRoof.w, 0.5)); glassMask = 0.0; }
+    // El alero en sí (u > 0,95) va de vidrio negro, como una visera que sigue a la luneta; solo lo que mira
+    // al cielo queda del color del techo. Pintado entero del techo, sus triángulos sueltos (el modelo está
+    // roto en esa unión) se veían como una franja blanca y gris rota sobre la luneta.
+    // Desde u > 0,96 va negro todo, también lo que mira al cielo: así el techo termina en un borde parejo
+    // y las puntas sueltas de las esquinas quedan dentro de lo negro (de costado parece vidrio envolvente).
+    if (u > 0.95 && h > 3.3 && (nrm.y <= 0.5 || u > 0.96)) { col = vec3(0.0); glassMask = 1.0; }
   } else {
   // Costados: zona naranja-roja que sube hacia atrás, filete blanco y franja amarilla.
   float B = 0.62 + smoothstep(0.22, 0.9, u) * 1.6;
@@ -1360,8 +1366,9 @@ float headMask = 0.0;
   }
 #ifdef IS_HULL
   if (u > 0.9 && h > 1.95 && h < 3.7 && uTexMode < 0.5) { col = vec3(0.004, 0.005, 0.006); glassMask = 1.0; }
-  // Con skin de imagen, lo que asoma por la unión del techo y la cola tiene el color del techo.
-  if (uTexMode > 0.5 && u > 0.9 && h > 3.45) { col = skinPx(mix(uTRoof.x, uTRoof.y, 0.9), mix(uTRoof.z, uTRoof.w, 0.5)); glassMask = 0.0; }
+  // Con skin de imagen, lo que asoma por la unión del techo y la cola va oscuro, como la sombra del alero:
+  // pintado del color del techo, sus triángulos sueltos se veían blancos sobre la luneta (parecía roto).
+  if (uTexMode > 0.5 && u > 0.9 && h > 3.45) { col = vec3(0.012, 0.013, 0.015); glassMask = 0.0; }
 #endif
   // Luces traseras verticales en las esquinas y faros delanteros.
   lightMask = rearFace * step(0.9, abs(p.x)) * step(0.85, h) * step(h, 2.15);

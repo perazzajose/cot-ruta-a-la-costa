@@ -1520,7 +1520,7 @@
   // si tiene más de una skin, el botón ÓMNIBUS del título alterna entre las suyas.
   const SKINS = World3D.SKINS;
   const COMPANIES = [
-    { id: 'cot', name: 'COT', color: '#f26b1d', skins: ['cot_mejorada', 'cot', 'cot925'] },
+    { id: 'cot', name: 'COT', color: '#f26b1d', skins: ['cot_mejorada'] },
     { id: 'rutas_del_sol', name: 'Rutas del Sol', color: '#1f6fd1', skins: ['rutas_del_sol'] },
     { id: 'cynsa', name: 'CYNSA', color: '#e0301e', skins: ['cynsa'] }
   ].map((c) => ({ ...c, skins: c.skins.filter((id) => SKINS.some((s) => s.id === id && s.available)) }))
@@ -1597,7 +1597,7 @@
   $('playerBox').addEventListener('pointerdown', (e) => e.stopPropagation());
   $('titlePlayer').addEventListener('pointerdown', (e) => { e.stopPropagation(); if (mode === 'title') openPlayer(null); });
 
-  // Botón del título: solo si la empresa tiene más de un ómnibus (COT: Primera Clase y 925).
+  // Botón del título: solo si la empresa tiene más de un ómnibus (hoy cada una tiene uno).
   function skinButtonText() {
     const s = SKINS.find((k) => k.id === player.skin) || SKINS[0];
     return `ÓMNIBUS: ${s.name.toUpperCase()}${touchUI ? '' : ' (O)'}`;
