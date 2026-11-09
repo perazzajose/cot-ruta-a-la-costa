@@ -1520,12 +1520,13 @@
   // si tiene más de una skin, el botón ÓMNIBUS del título alterna entre las suyas.
   const SKINS = World3D.SKINS;
   const COMPANIES = [
-    { id: 'cot', name: 'COT', color: '#f26b1d', skins: ['cot', 'cot925'] },
+    { id: 'cot', name: 'COT', color: '#f26b1d', skins: ['cot_mejorada', 'cot', 'cot925'] },
     { id: 'rutas_del_sol', name: 'Rutas del Sol', color: '#1f6fd1', skins: ['rutas_del_sol'] },
     { id: 'cynsa', name: 'CYNSA', color: '#e0301e', skins: ['cynsa'] }
   ].map((c) => ({ ...c, skins: c.skins.filter((id) => SKINS.some((s) => s.id === id && s.available)) }))
     .filter((c) => c.skins.length);
   const PLAYER_KEY = 'cot-ruta-3d-player';
+  const SKINS_V = 2;   // 2: COT 1° Clase (cot_mejorada) pasa a ser la de COT por defecto
   const player = { name: '', company: COMPANIES[0].id, skin: COMPANIES[0].skins[0], chosen: false };
   try {
     const saved = JSON.parse(localStorage.getItem(PLAYER_KEY) || 'null');
@@ -1533,12 +1534,14 @@
       player.name = String(saved.name || '').slice(0, 12);
       if (COMPANIES.some((c) => c.id === saved.company)) player.company = saved.company;
       const co = COMPANIES.find((c) => c.id === player.company);
-      player.skin = co.skins.includes(saved.skin) ? saved.skin : co.skins[0];
+      // SKINS_V sube cuando cambia el ómnibus por defecto de una empresa: la elección guardada
+      // de antes se descarta una vez, así todos ven la skin nueva (después se puede volver con ÓMNIBUS).
+      player.skin = saved.v === SKINS_V && co.skins.includes(saved.skin) ? saved.skin : co.skins[0];
     }
   } catch (e) { /* sin almacenamiento: se arranca de cero */ }
   const company = () => COMPANIES.find((c) => c.id === player.company) || COMPANIES[0];
   const savePlayer = () => {
-    try { localStorage.setItem(PLAYER_KEY, JSON.stringify({ name: player.name, company: player.company, skin: player.skin })); } catch (e) { /* no se recuerda */ }
+    try { localStorage.setItem(PLAYER_KEY, JSON.stringify({ name: player.name, company: player.company, skin: player.skin, v: SKINS_V })); } catch (e) { /* no se recuerda */ }
   };
   let afterPlayer = null;
 
