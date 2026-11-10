@@ -1,18 +1,15 @@
 # COT · Ruta a la Costa — contexto para Claude Code
 
-Juego de manejo de ómnibus de COT para navegador. Hay dos versiones:
-- **2D** (`index.html`, Phaser en `lib/phaser.min.js`, código en `src/`).
-- **3D** (`index3d.html`, three.js r170 en `lib/three.bundle.min.js`, código en `src3d/`).
+Juego de manejo de ómnibus de COT para navegador, en 3D: `index.html`, three.js r170 en `lib/three.bundle.min.js`, código en `src3d/`. (La versión 2D se sacó; de `src/` el juego solo usa `sound.js` y `ranking.js`.) Publicado en GitHub Pages: https://perazzajose.github.io/juegobus/
 
 El README.md describe la jugabilidad, los controles y el sistema de calidad adaptativa. Leelo antes de cambiar algo.
 
 ## Reglas del proyecto (no romper)
 
-- **Se abre con doble clic, sin servidor ni internet.** Nada de `fetch()` a archivos locales, nada de ES modules (`import`/`export`), nada de npm ni bundler. Todo son `<script src>` clásicos que definen globales (`THREE`, `World3D`, `ROUTE3D`, `RutaReal`…), en el orden de `index3d.html`.
+- **Se abre con doble clic, sin servidor ni internet.** Nada de `fetch()` a archivos locales, nada de ES modules (`import`/`export`), nada de npm ni bundler. Todo son `<script src>` clásicos que definen globales (`THREE`, `World3D`, `ROUTE3D`, `RutaReal`…), en el orden de `index.html`.
 - Los datos van como `.js` que asigna a `window` (ver `data/ruta-mvd-chuy.js`), nunca como `.json` cargado en tiempo de ejecución.
 - `THREE` es global (r170 + GLTFLoader). En los ejemplos de `docs/GUIA-RENDIMIENTO.md` que usan `import ... from 'three'`, usá `THREE.X`.
 - Tiene que andar en PCs modestas: el sistema de calidad adaptativa (`GFX_LEVELS` en `src3d/game3d.js`, meta de 50 FPS) se mantiene y cualquier cosa nueva debe poder degradarse con él.
-- No tocar la versión 2D salvo que se pida.
 - Créditos y licencias: el ómnibus es CC-BY 4.0 (`assets/bus-g7-license.txt`). El crédito tiene que seguir visible en el título.
 - Textos del juego en español rioplatense.
 
@@ -86,15 +83,13 @@ py tools/agregar_altura.py data/ruta-mvd-chuy.json
 
 ## Celular
 
-- Es responsive (media queries en `index3d.html` para pantallas angostas y para poca altura). Al entrar en un dispositivo táctil se abre `#controlBox`: **botones** o **inclinación**. La elección queda en `localStorage` (`cot-ruta-3d-control`) y se cambia con el botón CONTROLES del título.
+- Es responsive (media queries en `index.html` para pantallas angostas y para poca altura). Al entrar en un dispositivo táctil se abre `#controlBox`: **botones** o **inclinación**. La elección queda en `localStorage` (`cot-ruta-3d-control`) y se cambia con el botón CONTROLES del título.
 - La inclinación usa `devicemotion` (`accelerationIncludingGravity`), no `deviceorientation`, porque los ángulos se traban con el celular parado. La gravedad se pasa al plano de la pantalla según `screen.orientation.angle`, y el signo invertido de algunos celulares se detecta solo. El volante se centra al salir.
   - Inclinado mueve `S.targetX` de a poco; derecho, se acomoda en el carril más cercano (`updateTilt` en `game3d.js`).
   - En iPhone se pide `DeviceMotionEvent.requestPermission()` al tocar el botón. Hace falta https.
 - En el celular: pantalla completa al salir, botón de pausa `#bPause`, pausa automática en `visibilitychange`.
 
 ## Ideas pendientes
-
-- La versión 2D (`index.html`) sigue siendo Tres Cruces → Punta del Este. No se tocó porque no se pidió.
 
 - La Coronilla como cartel de localidad en Ruta 9 (Rocha → Chuy).
 - Revisar con fotos o el mapa los km aproximados de arroyos, del peaje Garzón y de la Fortaleza.

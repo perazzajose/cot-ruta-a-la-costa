@@ -9,7 +9,7 @@ Uso (desde la carpeta del juego):
 Escribe dos archivos con los mismos datos:
     data/ruta-mvd-chuy.json  -> para herramientas (agregar_altura.py)
     data/ruta-mvd-chuy.js    -> para el juego: define window.RUTA_REAL
-                                (funciona abriendo index3d.html con doble clic, sin servidor)
+                                (funciona abriendo index.html con doble clic, sin servidor)
 
 Salida (coordenadas en metros, origen = Terminal Tres Cruces):
     x = este (+) / oeste (-)

@@ -1,27 +1,26 @@
-# COT · Ruta a la Costa
+# Juego Bus · COT Ruta a la Costa
 
 Juego arcade para navegador. Manejás un ómnibus de COT de Montevideo al Chuy (línea 152I, por la Interbalnearia y Ruta 9), levantás pasajeros en las paradas y llegás en hora sin chocar.
 
-(La versión 2D, `index.html`, todavía es el viaje viejo de Tres Cruces a Punta del Este.)
+Se juega online en https://perazzajose.github.io/juegobus/
 
 ## Cómo abrirlo
 
-Hacé doble clic en `index.html`. Funciona sin internet y sin instalar nada (Phaser está incluido en `lib/`).
-Anda en PCs modestas: los gráficos se dibujan por código y no hay imágenes para descargar.
+Hacé doble clic en `index.html`. Funciona sin internet y sin instalar nada.
 
 Para el evento conviene abrirlo en pantalla completa (F11) en Chrome o Edge.
 
-## Versión 3D
+## El juego
 
-Abrí `index3d.html` (también con doble clic y sin internet). Es la misma jugabilidad, pero con la cámara detrás del ómnibus, tránsito en contramano, curvas y lomas. Se puede jugar en la PC y en el celular.
+Cámara detrás del ómnibus, tránsito en contramano, curvas y lomas. Se puede jugar en la PC y en el celular.
 
 - Se ve realista: el cielo es una foto 360° que también ilumina la escena y se refleja en la pintura y los vidrios, el asfalto y el pasto tienen texturas reales y en calidad alta hay sombras reales.
 - La calidad se ajusta sola por pasos. Si no llega a 50 cuadros por segundo, saca primero lo que menos se nota (resolución, tamaño de sombras, sombras, relieve, distancia de dibujo) y vuelve a medir después de cada paso. Lo que funcionó queda guardado en esa PC, así la próxima vez arranca directo ahí. Si en una sesión nueva anda sobrado, prueba subir un paso.
-- Para probar la PC del evento: `index3d.html?fps` muestra los cuadros por segundo y el paso de calidad actual.
+- Para probar la PC del evento: `index.html?fps` muestra los cuadros por segundo y el paso de calidad actual.
 - Para forzar un nivel fijo: `?q=high`, `?q=medium` o `?q=low`. Para que olvide lo aprendido en esa PC: `?q=reset`.
 - Al cargar, el juego compila de antemano los gráficos de todos los objetos ("Preparando gráficos…"), así no hay tirones la primera vez que aparece una parada o un camión.
-- Si una PC no tiene aceleración gráfica (WebGL), usá la versión 2D (`index.html`).
-- El ranking de la versión 3D es aparte del de la 2D. Se borra igual: **Shift + B** en el título.
+- Necesita una PC con aceleración gráfica (WebGL).
+- El ranking se borra con **Shift + B** en el título.
 
 **Créditos:** el ómnibus es ["Marcopolo g7 1200 FREE" de SquielOFICIAL](https://sketchfab.com/3d-models/marcopolo-g7-1200-free-3ccb328bf76f435fa6180936b59a8c90), con licencia [CC-BY 4.0](http://creativecommons.org/licenses/by/4.0/) (ver `assets/bus-g7-license.txt`). Se le quitó el interior, se simplificó (de 256 mil a 35 mil triángulos) y se le pintó la librea de COT por código. La licencia exige mantener este crédito, que también aparece en la pantalla de título. El cielo (kloofendal_48d_partly_cloudy_puresky) y las texturas de asfalto, pasto y arena son de [Poly Haven](https://polyhaven.com), con licencia CC0 (dominio público, sin obligación de dar crédito).
 
@@ -60,7 +59,7 @@ En el camino aparecen los peajes de **Pando** (km 33) y **Solís** (km 81), los 
 - **COT 1° Clase** (la única de COT): pintada con IA sobre nuestra plantilla (`assets/plantilla-omnibus/cot-mejorada.jpg` → `src3d/skins/cot_mejorada.js`). Se calzaron la cola y el frente, el parabrisas quedó en negro puro y el 986 / disco 90 se corrieron para que no queden cortados en la esquina ni tapados por la rejilla del motor.
 - Ya no se usan, pero siguen en el código por si se quieren recuperar (sumándolas a `COMPANIES`):
   - **COT Primera Clase** (`cot`): librea pintada por código según las fotos del Marcopolo de COT. Es también la de repuesto si falta una skin.
-  - **COT 925** (`cot925`; para usarla hay que volver a cargar `src3d/skinCot925.js` en `index3d.html`): sale de una plantilla de pintura de Proton Bus Simulator (`src/cot925.zip`). Como esa plantilla se hizo para otro modelo, se **proyecta** sobre el nuestro desde cada lado (costados, techo, cola y frente), calibrada para que sus ventanas coincidan con las del modelo. Lo negro de la plantilla se dibuja como vidrio. La imagen está embebida en `src3d/skinCot925.js` y la calibración de cada panel está en `SKINS` (`src3d/world3d.js`). La plantilla la hizo un modder: si el juego se publica, conviene pedirle permiso y darle crédito.
+  - **COT 925** (`cot925`; para usarla hay que volver a cargar `src3d/skinCot925.js` en `index.html`): sale de una plantilla de pintura de Proton Bus Simulator (`src/cot925.zip`). Como esa plantilla se hizo para otro modelo, se **proyecta** sobre el nuestro desde cada lado (costados, techo, cola y frente), calibrada para que sus ventanas coincidan con las del modelo. Lo negro de la plantilla se dibuja como vidrio. La imagen está embebida en `src3d/skinCot925.js` y la calibración de cada panel está en `SKINS` (`src3d/world3d.js`). La plantilla la hizo un modder: si el juego se publica, conviene pedirle permiso y darle crédito.
 
 **Modelos del paisaje y del tránsito** (packs en `assets/modelos/`, preparados en `src3d/models/*.js` con `tools/preparar_modelos.mjs`, cargados por `src3d/models3d.js`):
 - **Árboles** (frondosos, eucaliptos y pinos) y **casas** del pack. Se dibujan con *instancing*: todas las copias de un modelo van en un solo dibujo, así que un monte entero cuesta casi lo mismo que un árbol. Cada modelo de casa tiene sus colores de balneario.
@@ -84,7 +83,7 @@ En el camino aparecen los peajes de **Pando** (km 33) y **Solís** (km 81), los 
    - al lado, el frente.
    `plantilla-ejemplo-cot.png` es la misma plantilla con la librea de COT, como referencia.
 2. Pintá encima, sin mover ni estirar nada. Lo que pintes **negro puro** se dibuja como vidrio. La luneta también se puede pintar (por ejemplo, con un logo).
-3. Guardala como JPG de 2048 × 2048 (cuadrada) y convertila: `py tools/skin_a_js.py mi-skin.jpg cot_verano "COT Verano"`. El script crea `src3d/skins/cot_verano.js` y lo agrega a `index3d.html`. Para que se pueda elegir, sumá su id a la empresa en `COMPANIES` (`src3d/game3d.js`); con más de una, aparece el botón ÓMNIBUS.
+3. Guardala como JPG de 2048 × 2048 (cuadrada) y convertila: `py tools/skin_a_js.py mi-skin.jpg cot_verano "COT Verano"`. El script crea `src3d/skins/cot_verano.js` y lo agrega a `index.html`. Para que se pueda elegir, sumá su id a la empresa en `COMPANIES` (`src3d/game3d.js`); con más de una, aparece el botón ÓMNIBUS.
 
 Si el modelo del ómnibus cambia, la plantilla se regenera abriendo `tools/generar_plantilla.html?blanco` (y `?ejemplo`) y guardando la imagen.
 

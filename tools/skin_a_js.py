@@ -6,7 +6,7 @@ Uso (desde la carpeta del juego):
 - La imagen tiene que estar pintada sobre assets/plantilla-omnibus/plantilla-en-blanco.png
   (cuadrada, mismas proporciones; conviene exportarla como JPG de 2048 x 2048 para que pese poco).
 - Lo que se pinte NEGRO PURO se dibuja como vidrio.
-- Crea src3d/skins/<id>.js y agrega su <script> en index3d.html (antes de world3d.js).
+- Crea src3d/skins/<id>.js y agrega su <script> en index.html (antes de world3d.js).
 Solo usa la librería estándar de Python.
 """
 import base64
@@ -39,7 +39,7 @@ def main():
         f"{{ id: '{skin_id}', name: {name!r}, tex: '{skin_id}' }});\n",
         encoding="utf-8",
     )
-    html = ROOT / "index3d.html"
+    html = ROOT / "index.html"
     text = html.read_text(encoding="utf-8")
     tag = f'  <script src="src3d/skins/{skin_id}.js"></script>\n'
     if tag not in text:

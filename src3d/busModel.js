@@ -2,7 +2,7 @@
 // https://sketchfab.com/3d-models/marcopolo-g7-1200-free-3ccb328bf76f435fa6180936b59a8c90
 // Procesado para el juego: sin interior (251 piezas), simplificado de 256k a 35k triángulos,
 // escalado a 13 m con el frente hacia -Z. La librea COT se pinta con un shader (ver world3d.js).
-// Embebido en base64 para que cargue abriendo index3d.html con doble clic (file://).
+// Embebido en base64 para que cargue abriendo index.html con doble clic (file://).
 // hull: "segunda piel" interior calculada con rayos (tools fuera del juego): secciones cada dz m desde z0,
 //   na radios (cm) desde el eje (0, yc). Se dibuja con la librea unos cm adentro de la carrocería:
 //   donde el modelo tiene agujeros (techo trasero, paragolpes) se ve la pintura y no el interior.
