@@ -177,6 +177,15 @@
     }
     @media (max-height: 380px) { .card .help { display: none; } }
 
+    /* Botones estilo 16 bits: esquinas rectas, borde grueso y sombra dura que se "hunde" al apretar. */
+    button, .tramo, .choice, #playerName, .card { border-radius: 0 !important; }
+    button, .tramo { box-shadow: 4px 4px 0 rgba(0, 0, 0, 0.55); letter-spacing: 1px; transition: none; }
+    button:active, .tramo:active { transform: translate(3px, 3px); box-shadow: 1px 1px 0 rgba(0, 0, 0, 0.55); }
+    #touch button { border-width: 4px; font-family: "Courier New", monospace; }
+    #playerOk { box-shadow: 4px 4px 0 #8a6800; }
+    #playerOk:active { box-shadow: 1px 1px 0 #8a6800; }
+    #companies .choice i { border-radius: 0; }
+
     #fps { position: fixed; left: 8px; bottom: 8px; z-index: 20; font: bold 13px monospace; color: #9be37a;
       background: rgba(0, 0, 0, 0.6); padding: 4px 8px; border-radius: 4px; pointer-events: none; }
     #loading { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 24px;

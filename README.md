@@ -14,6 +14,9 @@ Para el evento conviene abrirlo en pantalla completa (F11) en Chrome o Edge.
 
 Cámara detrás del ómnibus, tránsito en contramano, curvas y lomas. Se puede jugar en la PC y en el celular.
 
+- Se puede ir **de contramano**: en la Interbalnearia, cruzando la doble amarilla hasta los dos carriles de enfrente, y en Ruta 9 por el carril izquierdo. Los autos que vienen de frente se chocan. Las encomiendas y los mates solo aparecen en tu mano.
+- Los botones tienen estilo 16 bits: esquinas rectas y sombra dura.
+
 - Se ve realista: el cielo es una foto 360° que también ilumina la escena y se refleja en la pintura y los vidrios, el asfalto y el pasto tienen texturas reales y en calidad alta hay sombras reales.
 - La calidad se ajusta sola por pasos. Si no llega a 50 cuadros por segundo, saca primero lo que menos se nota (resolución, tamaño de sombras, sombras, relieve, distancia de dibujo) y vuelve a medir después de cada paso. Lo que funcionó queda guardado en esa PC, así la próxima vez arranca directo ahí. Si en una sesión nueva anda sobrado, prueba subir un paso.
 - Para probar la PC del evento: `index.html?fps` muestra los cuadros por segundo y el paso de calidad actual.

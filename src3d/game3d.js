@@ -36,6 +36,14 @@
   const roadAt = (pos) => World3D.ROAD_PROFILES[profileAt(pos)];
   // Ruta 9 (un carril por mano) en esa posición; sin argumento, donde está el ómnibus.
   const twoWay = (pos) => profileAt(pos === undefined ? (S ? S.dist : 0) : pos) === 'r9';
+  // Carriles por los que puede ir el ómnibus: los nuestros y también los de contramano
+  // (Interbalnearia: los dos del otro lado de la doble amarilla; Ruta 9: el izquierdo, que ya es de LANE_X).
+  const busLanes = (pos) => {
+    const p = World3D.ROAD_PROFILES[profileAt(pos === undefined ? S.dist : pos)];
+    return p.id === 'ib' ? [...p.ONCOMING_LANES].sort((a, b) => a - b).concat(LANE_X) : LANE_X;
+  };
+  // ¿El ómnibus va de contramano? (pasó la línea amarilla del centro)
+  const contramano = () => S.busX < World3D.ROAD_PROFILES[profileAt(S.dist)].CENTER_X + 0.6;
   // Donde termina la Interbalnearia y empieza Ruta 9 (cambio de perfil de la calzada).
   const PROFILE_CHANGES = SEGS.filter((g, i) => i > 0 && SEGS[i - 1].profile !== g.profile)
     .map((g) => ({ pos: g.p0, behind: SEGS[SEGS.indexOf(g) - 1].profile, ahead: g.profile }));
@@ -132,7 +140,6 @@
   const decos = [];
   const rows = [];
   const backdrops = [];
-  const oncoming = [];
 
   function newRun(attract) {
     return {
@@ -412,18 +419,6 @@
       });
       rows.push(r);
     });
-    // Interbalnearia: pocos autos de adorno por los dos carriles que vienen (al otro lado de la
-    // doble amarilla). En Ruta 9 los de frente vienen por el carril izquierdo y se pueden chocar
-    // (los genera spawnOncoming), así que estos se esconden.
-    const ibLanes = World3D.ROAD_PROFILES.ib.ONCOMING_LANES;
-    for (let i = 0; i < 4; i++) {
-      const car = noCull(World3D.makeCar(pick(World3D.CAR_COLORS)));
-      car.rotation.y = Math.PI;
-      car.userData.pos = rand(60, 600);
-      car.position.x = ibLanes[i % 2];
-      scene.add(car);
-      oncoming.push(car);
-    }
   }
 
   function resetDecos() {
@@ -571,12 +566,6 @@
       d.position.z = -(d.userData.pos - S.dist);
     }
     updatePools();
-    for (const c of oncoming) {
-      c.userData.pos -= 30 * dt;
-      if (c.userData.pos < S.dist - 30) c.userData.pos = S.dist + rand(300, 600);
-      c.position.z = -(c.userData.pos - S.dist);
-      c.visible = profileAt(c.userData.pos) === 'ib';
-    }
   }
 
   // ---------- Spawns ----------
@@ -595,16 +584,19 @@
     S.nextCarAt = S.dist + (150 + 90 * (1 - p)) * rand(0.75, 1.3);
   }
 
-  // Ruta 9: los que vienen de frente, por el carril izquierdo. A veces en fila, a veces con un hueco
-  // largo para pasar tranquilo.
+  // Los que vienen de frente. Ruta 9: por el carril izquierdo, a veces en fila, a veces con un hueco
+  // largo para pasar tranquilo. Interbalnearia: por los dos carriles del otro lado de la doble amarilla.
+  // En los dos casos se pueden chocar si el ómnibus va de contramano.
   function spawnOncoming() {
     const p = S.dist / TRIP_M;
+    const at = S.dist + ONCOMING_AHEAD;
+    const ib = !twoWay(at);
     const car = Math.random() < 0.25 ? World3D.makeTruck() : World3D.makeCar(pick(World3D.CAR_COLORS));
     car.rotation.y = Math.PI;
-    car.position.x = LANE_X[0];
-    addWorld(car, S.dist + ONCOMING_AHEAD, { lane: 0, speed: -rand(19, 24), oncoming: true });
+    car.position.x = ib ? pick(World3D.ROAD_PROFILES.ib.ONCOMING_LANES) : LANE_X[0];
+    addWorld(car, at, { lane: -1, speed: -rand(19, 24), oncoming: true, ibLane: ib });
     S.cars.push(car);
-    const gap = Math.random() < 0.3 ? rand(300, 450) : rand(80, 200);
+    const gap = ib ? rand(70, 170) : Math.random() < 0.3 ? rand(300, 450) : rand(80, 200);
     S.nextOncomingAt = S.dist + gap * (1 - 0.25 * p);
   }
 
@@ -630,8 +622,11 @@
     S.nextCarAt = S.dist + (75 + 55 * (1 - p)) * rand(0.75, 1.25) + (S.attract ? 25 : 0);
   }
 
+  // Encomiendas y mates: solo en nuestros carriles, nunca del lado de contramano
+  // (en Ruta 9 el carril izquierdo es de contramano, así que van en el derecho).
   function spawnPickup() {
-    const free = LANES.filter((l) => !S.cars.some((c) => c.userData.lane === l && c.position.z < -(SPAWN_AHEAD - 50)));
+    const ours = twoWay(S.dist + SPAWN_AHEAD) ? [RIGHT] : LANES;
+    const free = ours.filter((l) => !S.cars.some((c) => c.userData.lane === l && c.position.z < -(SPAWN_AHEAD - 50)));
     if (free.length) {
       const lane = pick(free);
       const kind = S.confort < 85 && Math.random() < 0.55 ? 'mate' : 'box';
@@ -725,7 +720,7 @@
     const nearEnd = S.dist > TRIP_M - 2 * M_PER_KM;
     if (mode !== 'ending' && !nearEnd) {
       if (S.dist >= S.nextCarAt) spawnCars();
-      if (twoWay(S.dist + ONCOMING_AHEAD) && S.dist >= S.nextOncomingAt) spawnOncoming();
+      if (S.dist >= S.nextOncomingAt) spawnOncoming();
       if (!S.attract && S.dist >= S.nextPickupAt) spawnPickup();
     }
   }
@@ -797,6 +792,8 @@
 
     // Dirección con inercia: la velocidad lateral sigue al carril elegido de a poco, sin pasarse.
     // Parado casi no se puede mover de costado (un ómnibus no hace "strafe").
+    // Donde la ruta se angosta (fin de la Interbalnearia), el ómnibus vuelve a la calzada.
+    S.targetX = Math.max(S.targetX, busLanes()[0]);
     const err = S.targetX - S.busX;
     const steer = Math.min(1, 0.2 + S.speed / 14);
     const want = Math.max(-LAT_MAX, Math.min(LAT_MAX, err * 1.6)) * steer;
@@ -956,10 +953,10 @@
         continue;
       }
       if (u.oncoming) {
-        // Los de frente que llegan a la Interbalnearia siguen por los carriles de enfrente (al otro lado
-        // de la doble amarilla) y ya no se pueden chocar.
-        if (profileAt(u.pos) === 'ib' && !u.ibLane) { u.ibLane = true; u.passed = true; }
-        if (u.ibLane) car.position.x += (World3D.ROAD_PROFILES.ib.ONCOMING_LANES[0] - car.position.x) * Math.min(1, dt * 1.5);
+        // Los de frente que llegan a la Interbalnearia pasan a su carril de enfrente (al otro lado de la
+        // doble amarilla). Se siguen pudiendo chocar: el ómnibus puede ir de contramano.
+        if (profileAt(u.pos) === 'ib' && !u.ibLane) { u.ibLane = true; u.ibX = World3D.ROAD_PROFILES.ib.ONCOMING_LANES[0]; }
+        if (u.ibX !== undefined) car.position.x += (u.ibX - car.position.x) * Math.min(1, dt * 1.5);
         continue;
       }
       // Fin de la Interbalnearia: el carril izquierdo se termina y los autos pasan al derecho.
@@ -1267,11 +1264,13 @@
     const light = S.marks.find((m) => m.type === 'semaforo' && m.obj && !m.judged && m.pos - S.dist < 220);
     // Fin de la Interbalnearia.
     const merge = PROFILE_CHANGES.find((c) => c.ahead === 'r9' && c.pos - S.dist < 500 && c.pos - S.dist > -40);
-    // Ruta 9: si estás en el carril de enfrente y se acerca alguien, es lo primero que se avisa.
-    const headOn = twoWay() && S.busX < 0.6 &&
-      S.cars.some((c) => c.userData.oncoming && !c.userData.hit && c.position.z < 0 && c.position.z > -200);
+    // De contramano: si se acerca alguien por tu carril, es lo primero que se avisa.
+    const headOn = contramano() && S.cars.some((c) => c.userData.oncoming && !c.userData.hit &&
+      c.position.z < 0 && c.position.z > -200 && Math.abs(c.position.x - S.busX) < 2.6);
     if (headOn && mode === 'play') {
       msg = '¡VIENE UNO DE FRENTE!  Volvé a tu carril ▶';
+    } else if (contramano() && !twoWay() && mode === 'play') {
+      msg = '¡VAS DE CONTRAMANO!  Volvé a tu mano ▶';
     } else if (light && light.light !== 'green' && mode === 'play') {
       const d = light.pos - 6 - S.dist - bus.userData.len / 2;
       msg = light.light === 'yellow' ? '¡Amarillo! Frená antes de la línea'
@@ -1486,11 +1485,12 @@
   // y al soltar se queda donde está (también entre dos carriles).
   const TAP_TIME = 0.22;                // más que esto apretado ya es "mantener"
   const steer = { dir: 0, held: 0 };
-  const clampX = (x) => Math.max(LANE_X[0], Math.min(LANE_X[RIGHT], x));
+  const clampX = (x) => Math.max(busLanes()[0], Math.min(LANE_X[RIGHT], x));
 
   function nextLaneX(x, dir) {
-    if (dir > 0) return LANE_X.find((l) => l > x + 0.4) ?? LANE_X[RIGHT];
-    return [...LANE_X].reverse().find((l) => l < x - 0.4) ?? LANE_X[0];
+    const lanes = busLanes();
+    if (dir > 0) return lanes.find((l) => l > x + 0.4) ?? LANE_X[RIGHT];
+    return [...lanes].reverse().find((l) => l < x - 0.4) ?? lanes[0];
   }
 
   function steerPress(dir) {
@@ -1644,7 +1644,7 @@
     tilt.raw = tilt.raw === null ? deg : tilt.raw + (deg - tilt.raw) * 0.35;
   }
 
-  const nearestLane = (x) => LANE_X.reduce((b, l) => (Math.abs(l - x) < Math.abs(b - x) ? l : b), LANE_X[0]);
+  const nearestLane = (x) => busLanes().reduce((b, l) => (Math.abs(l - x) < Math.abs(b - x) ? l : b), LANE_X[0]);
 
   function updateTilt(dt) {
     if (tilt.raw === null) return;

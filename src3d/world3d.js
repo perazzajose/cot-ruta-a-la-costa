@@ -791,8 +791,8 @@ const World3D = (() => {
     const { ROAD, CENTER_X, ONCOMING_LANES } = P;
     const middles = P.id === 'r9' ? [CENTER_X] : [(ONCOMING_LANES[0] + ONCOMING_LANES[1]) / 2, CENTER_X, 0];
     tollPlaza(g, ROAD, [ROAD.l + 0.5, ...middles, ROAD.r - 0.4], name);
-    // Las que puede chocar el ómnibus (entre los carriles por los que se mueve).
-    g.userData.islands = middles.filter((x) => x >= LANE_X[0] - 1.8 && x < LANE_X[1]);
+    // Las que puede chocar el ómnibus (también las del lado de contramano).
+    g.userData.islands = middles.filter((x) => x > ROAD.l + 1 && x < LANE_X[1]);
     g.userData.islandHalf = 0.3;
     g.userData.halfLen = 7.5;
     return g;
