@@ -29,7 +29,7 @@ Cámara detrás del ómnibus, tránsito en contramano, curvas y lomas. Se puede 
 
 **Ojo con el modelo del ómnibus:** los nombres internos del archivo siguen la convención de los mods de Proton Bus Simulator. El autor lo publica como propio con licencia CC-BY, pero no se pudo confirmar que sea obra suya. Para uso interno alcanza; antes de publicar el juego, conviene confirmarlo o reemplazar el modelo.
 
-Archivos de la versión 3D: `src3d/` (lógica, mundo y librea), `lib/three.bundle.min.js` (three.js r170 con GLTFLoader), `src3d/textures3d.js` (texturas embebidas) y `assets/bus-g7.glb` (el ómnibus procesado, también embebido en `src3d/busModel.js`).
+Archivos de la versión 3D: `src3d/` (lógica, mundo y librea), `lib/three.bundle.min.js` (three.js r162 con GLTFLoader; es la última que anda con WebGL 1, para PCs viejas como las de Windows 7), `src3d/textures3d.js` (texturas embebidas) y `assets/bus-g7.glb` (el ómnibus procesado, también embebido en `src3d/busModel.js`).
 
 **Cambiar la librea:** los colores, la franja y el logo se dibujan en `liveryMaterial()`, dentro de `src3d/world3d.js`. Si COT pasa el logo oficial en PNG, se puede reemplazar el que está dibujado con texto.
 

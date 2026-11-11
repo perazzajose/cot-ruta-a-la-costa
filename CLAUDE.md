@@ -1,6 +1,6 @@
 # COT · Ruta a la Costa — contexto para Claude Code
 
-Juego de manejo de ómnibus de COT para navegador, en 3D: `index.html`, three.js r170 en `lib/three.bundle.min.js`, código en `src3d/`. (La versión 2D se sacó; de `src/` el juego solo usa `sound.js` y `ranking.js`.) Publicado en GitHub Pages: https://perazzajose.github.io/juegobus/
+Juego de manejo de ómnibus de COT para navegador, en 3D: `index.html`, three.js r162 en `lib/three.bundle.min.js`, código en `src3d/`. (La versión 2D se sacó; de `src/` el juego solo usa `sound.js` y `ranking.js`.) Publicado en GitHub Pages: https://perazzajose.github.io/juegobus/
 
 El README.md describe la jugabilidad, los controles y el sistema de calidad adaptativa. Leelo antes de cambiar algo.
 
@@ -8,7 +8,7 @@ El README.md describe la jugabilidad, los controles y el sistema de calidad adap
 
 - **Se abre con doble clic, sin servidor ni internet.** Nada de `fetch()` a archivos locales, nada de ES modules (`import`/`export`), nada de npm ni bundler. Todo son `<script src>` clásicos que definen globales (`THREE`, `World3D`, `ROUTE3D`, `RutaReal`…), en el orden de `index.html`.
 - Los datos van como `.js` que asigna a `window` (ver `data/ruta-mvd-chuy.js`), nunca como `.json` cargado en tiempo de ejecución.
-- `THREE` es global (r170 + GLTFLoader). En los ejemplos de `docs/GUIA-RENDIMIENTO.md` que usan `import ... from 'three'`, usá `THREE.X`.
+- `THREE` es global (r162 + GLTFLoader). **No subir a r163 o más:** desde r163 three.js no anda con WebGL 1, y PCs viejas (Windows 7 de la agencia de COT, 11/11/2026) solo tienen WebGL 1. Bundle armado con esbuild (`three@0.162.0`, entrada `window.THREE = {...THREE, GLTFLoader}`, formato iife). Si no hay WebGL, un script en `index.html` muestra un aviso en vez de quedar en "Cargando…". En los ejemplos de `docs/GUIA-RENDIMIENTO.md` que usan `import ... from 'three'`, usá `THREE.X`.
 - Tiene que andar en PCs modestas: el sistema de calidad adaptativa (`GFX_LEVELS` en `src3d/game3d.js`, meta de 50 FPS) se mantiene y cualquier cosa nueva debe poder degradarse con él.
 - Créditos y licencias: el ómnibus es CC-BY 4.0 (`assets/bus-g7-license.txt`). El crédito tiene que seguir visible en el título.
 - Textos del juego en español rioplatense.

@@ -271,6 +271,31 @@
   </div>
 
 
+  <script>
+    // Si la PC no tiene gráficos 3D (WebGL) o algo falla al arrancar, se avisa en vez de quedar en "Cargando…".
+    (function () {
+      function aviso(msg) {
+        var el = document.getElementById('loading');
+        if (!el || el.style.display === 'none' || el.classList.contains('hidden')) return;
+        el.style.cssText += ';flex-direction:column;text-align:center;padding:20px;background:#0d1b2a;color:#fff;font-size:20px;line-height:1.5';
+        el.innerHTML = msg;
+      }
+      var c = document.createElement('canvas'), gl = null;
+      try { gl = c.getContext('webgl2') || c.getContext('webgl') || c.getContext('experimental-webgl'); } catch (e) {}
+      if (!gl) {
+        aviso('<b style="color:#f2b705;font-size:26px">Esta PC no puede mostrar el juego en 3D</b>' +
+          'El navegador tiene los gráficos 3D (WebGL) desactivados o la placa de video no los soporta.<br>' +
+          'Probá actualizar el driver de video, usar Chrome o Firefox actualizados, o jugar desde otra PC o el celular.');
+        window.__sinWebGL = true;
+      }
+      window.addEventListener('error', function (e) {
+        if (window.__sinWebGL) return;
+        aviso('<b style="color:#f2b705;font-size:26px">No se pudo arrancar el juego</b>' +
+          'Probá recargar la página. Si sigue igual, puede que esta PC no soporte los gráficos 3D.<br>' +
+          '<small style="color:#cfe0f5">' + String(e.message || '').replace(/</g, '&lt;') + '</small>');
+      });
+    })();
+  </script>
   <script src="lib/three.bundle.min.js"></script>
   <script src="src3d/bend3d.js"></script>
   <script src="data/ruta-mvd-chuy.js"></script>
