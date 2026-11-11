@@ -65,13 +65,17 @@
     { name: 'sin sombras reales', pr: 0.85, shadow: 0, normals: true },
     { name: 'sin relieve', pr: 0.85, shadow: 0, normals: false },
     { name: 'distancia corta', pr: 0.75, shadow: 0, normals: false, short: true },
-    { name: 'mínima', pr: 0.6, shadow: 0, normals: false, short: true, lambert: true }
+    { name: 'mínima', pr: 0.6, shadow: 0, normals: false, short: true, lambert: true },
+    // Para PCs que dibujan sin placa de video (WebGL 1 o por software, p. ej. Windows 7 viejos):
+    // menos píxeles, un cuarto de los árboles y casas, sin bosque extra y niebla más cerca.
+    { name: 'muy baja', pr: 0.45, shadow: 0, normals: false, short: true, lambert: true, tiny: true },
+    { name: 'ultra baja', pr: 0.33, shadow: 0, normals: false, short: true, lambert: true, tiny: true, noEnv: true }
   ];
-  const GFX_PRESETS = { high: 0, medium: 4, low: 7 };
+  const GFX_PRESETS = { high: 0, medium: 4, low: 7, min: 9 };
   const GFX_TARGET = 50;
   const GFX_KEY = 'cot-ruta-3d-gfx';
   // ?q=high|medium|low fuerza un nivel fijo; ?q=reset olvida lo aprendido en esta PC.
-  const qParam = (location.search.match(/[?&]q=(low|medium|high|reset)/) || [])[1] || (/[?&]low\b/.test(location.search) ? 'low' : null);
+  const qParam = (location.search.match(/[?&]q=(low|medium|high|min|reset)/) || [])[1] || (/[?&]low\b/.test(location.search) ? 'low' : null);
   const weak = window.matchMedia('(pointer: coarse)').matches || (navigator.hardwareConcurrency || 4) <= 4;
   const deviceSig = `${screen.width}x${screen.height}@${window.devicePixelRatio || 1}|${navigator.hardwareConcurrency || 0}`;
   let savedLevel = null;
@@ -80,8 +84,21 @@
     const saved = JSON.parse(localStorage.getItem(GFX_KEY) || 'null');
     if (saved && saved.sig === deviceSig) savedLevel = saved.level;
   } catch (e) { /* sin almacenamiento: se mide cada vez */ }
+  // PC sin WebGL 2 o que dibuja por software: arranca en "muy baja" (después baja más si hace falta).
+  const slowGpu = (() => {
+    try {
+      const c = document.createElement('canvas');
+      if (!c.getContext('webgl2')) return true;
+      const gl = c.getContext('webgl2');
+      const ext = gl.getExtension('WEBGL_debug_renderer_info');
+      const name = ext ? String(gl.getParameter(ext.UNMASKED_RENDERER_WEBGL)) : '';
+      return /swiftshader|llvmpipe|software|basic render|gdi generic/i.test(name);
+    } catch (e) { return false; }
+  })();
   const gfx = {
-    level: qParam && GFX_PRESETS[qParam] !== undefined ? GFX_PRESETS[qParam] : savedLevel ?? (weak ? GFX_PRESETS.medium : GFX_PRESETS.high),
+    level: qParam && GFX_PRESETS[qParam] !== undefined ? GFX_PRESETS[qParam]
+      : slowGpu ? Math.max(savedLevel ?? 0, GFX_PRESETS.min - 1)
+      : savedLevel ?? (weak ? GFX_PRESETS.medium : GFX_PRESETS.high),
     auto: !(qParam && GFX_PRESETS[qParam] !== undefined),
     lock: 0                             // mejor nivel permitido en esta sesión
   };
@@ -96,9 +113,11 @@
   // Cielo real (foto 360°) que además ilumina y se refleja en la pintura y los vidrios.
   const scene = new THREE.Scene();
   scene.fog = new THREE.Fog(0xc9d8e6, 90, 330);
+  let envTex = null;                        // reflejos del cielo (en "ultra baja" no se usan)
   const skyTex = new THREE.TextureLoader().load(TEX3D.sky, (t) => {
     const pmrem = new THREE.PMREMGenerator(renderer);
-    scene.environment = pmrem.fromEquirectangular(t).texture;
+    envTex = pmrem.fromEquirectangular(t).texture;
+    if (!GFX_LEVELS[gfx.level].noEnv) scene.environment = envTex;
     pmrem.dispose();
   });
   skyTex.mapping = THREE.EquirectangularReflectionMapping;
@@ -178,18 +197,26 @@
     const shadowsChanged = renderer.shadowMap.enabled !== shadows;
     renderer.shadowMap.enabled = shadows;
     sun.castShadow = shadows;
-    hemi.intensity = L.lambert ? 1.8 : 0.6;
+    hemi.intensity = L.noEnv ? 2.6 : L.lambert ? 1.8 : 0.6;
+    scene.environment = L.noEnv ? null : envTex;
     road.setQuality(L.lambert ? 'low' : L.normals ? 'high' : 'medium');
     // Distancia de dibujo: más niebla, menos lejos y la mitad de los árboles.
-    scene.fog.near = L.short ? 60 : 90;
-    scene.fog.far = L.short ? 210 : 330;
+    scene.fog.near = L.tiny ? 35 : L.short ? 60 : 90;
+    scene.fog.far = L.tiny ? 150 : L.short ? 210 : 330;
     camera.far = L.short ? 700 : 1200;    // lejos solo se ven los cerros (sin niebla); el resto lo tapa la niebla
-    decos.forEach((d, k) => { d.visible = d.userData.biomeOK !== false && (!L.short || k % 2 === 0); });
+    decos.forEach((d, k) => { d.visible = d.userData.biomeOK !== false && decoShown(d, k); });
     if (shadowsChanged) {
       scene.traverse((o) => { if (o.material) [].concat(o.material).forEach((m) => { m.needsUpdate = true; }); });
     }
     syncBlobs(scene);
     resize();
+  }
+
+  // Cuántos árboles y casas se dibujan según la calidad: todos, la mitad o un cuarto (sin bosque extra).
+  function decoShown(d, k = d.userData.idx) {
+    const L = GFX_LEVELS[gfx.level];
+    if (L.tiny) return !d.userData.forest && k % 4 === 0;
+    return !L.short || k % 2 === 0;
   }
 
   function saveGfx() {
@@ -265,7 +292,7 @@
       d.rotation.y = rand(0, Math.PI * 2);
       d.scale.setScalar(rand(0.8, 1.35));
       d.userData.biomeOK = Math.random() < dens * kind && !crossingNear(pos) && b >= a;
-      d.visible = d.userData.biomeOK && (!GFX_LEVELS[gfx.level].short || d.userData.idx % 2 === 0);
+      d.visible = d.userData.biomeOK && decoShown(d);
       return;
     }
     // Las calles de los cruces con semáforo quedan libres (ni casas ni árboles encima).
@@ -282,7 +309,7 @@
     d.scale.setScalar(t === 'house' ? 1 : rand(0.8, 1.25));
     const w = bio.monte && woody ? 1 : Math.min(1, (bio.weights[t] || 0) / 4);
     d.userData.biomeOK = Math.random() < w && ranges[side][1] >= ranges[side][0];
-    d.visible = d.userData.biomeOK && (!GFX_LEVELS[gfx.level].short || d.userData.idx % 2 === 0);
+    d.visible = d.userData.biomeOK && decoShown(d);
   }
 
   // Tipos de decoración que usan modelos del pack (variantes). Se dibujan con InstancedMesh: cada
@@ -1186,7 +1213,8 @@
       return;
     }
     if (fps >= GFX_TARGET || gfx.level >= GFX_LEVELS.length - 1) return;
-    applyGfx(gfx.level + 1);
+    // Muy lejos del objetivo: baja dos pasos de una (en una PC lenta, de a uno tarda demasiado).
+    applyGfx(Math.min(GFX_LEVELS.length - 1, gfx.level + (fps < GFX_TARGET * 0.5 ? 2 : 1)));
     gfx.lock = gfx.level;
     saveGfx();
     meter.settle = 1;

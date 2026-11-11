@@ -20,7 +20,7 @@ Cámara detrás del ómnibus, tránsito en contramano, curvas y lomas. Se puede 
 - Se ve realista: el cielo es una foto 360° que también ilumina la escena y se refleja en la pintura y los vidrios, el asfalto y el pasto tienen texturas reales y en calidad alta hay sombras reales.
 - La calidad se ajusta sola por pasos. Si no llega a 50 cuadros por segundo, saca primero lo que menos se nota (resolución, tamaño de sombras, sombras, relieve, distancia de dibujo) y vuelve a medir después de cada paso. Lo que funcionó queda guardado en esa PC, así la próxima vez arranca directo ahí. Si en una sesión nueva anda sobrado, prueba subir un paso.
 - Para probar la PC del evento: `index.html?fps` muestra los cuadros por segundo y el paso de calidad actual.
-- Para forzar un nivel fijo: `?q=high`, `?q=medium` o `?q=low`. Para que olvide lo aprendido en esa PC: `?q=reset`.
+- Para forzar un nivel fijo: `?q=high`, `?q=medium`, `?q=low` o `?q=min` (la más baja, para PCs muy viejas). Para que olvide lo aprendido en esa PC: `?q=reset`.
 - Al cargar, el juego compila de antemano los gráficos de todos los objetos ("Preparando gráficos…"), así no hay tirones la primera vez que aparece una parada o un camión.
 - Necesita una PC con aceleración gráfica (WebGL).
 - El ranking se borra con **Shift + B** en el título.
